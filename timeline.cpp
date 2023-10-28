@@ -1318,13 +1318,18 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         ImGui::TableSetupColumn(
             "Composition",
             ImGuiTableColumnFlags_WidthFixed);
-        if (ImGui::GetFrameCount() > 1) { // crash if we call this on the 1st frame?!
+        static bool first = true;
+        if (!first) {
             // We allow the 1st column to be user-resizable, but
             // we want the 2nd column to always fit the timeline content.
             // Add some padding, so you can read the playhead label when it sticks off
             // the end.
+            // TableSetColumnWidth can't be called until TableNexrRow has been
+            // called at least once, so it's guarded with first.
             ImGui::TableSetColumnWidth(1, fmaxf(0.0f, full_width) + 200.0f);
         }
+        first = false;
+        
         // Always show the track labels & the playhead track
         ImGui::TableSetupScrollFreeze(1, 1);
 

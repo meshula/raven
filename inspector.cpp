@@ -609,6 +609,13 @@ void DrawInspector(TimelineProviderHarness* tp) {
 }
 
 void DrawMarkersInspector(TimelineProviderHarness* tp) {
+    if (tp->provider->RootNode() == TimelineNodeNull()) {
+        ImGui::BeginGroup();
+        ImGui::Text("No timeline");
+        ImGui::EndGroup();
+        return;
+    }
+
     // This temporary variable is used only for a moment to convert
     // between the datatypes that OTIO uses vs the one that ImGui widget uses.
     char tmp_str[1000];

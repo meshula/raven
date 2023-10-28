@@ -50,15 +50,18 @@ class OTIOProvider : public TimelineProvider {
     uint64_t nextId = 0;
     std::string nullName;
 public:
-    OTIOProvider() = default;
+    OTIOProvider() {
+        nullName = "<null>";
+    }
     virtual ~OTIOProvider() = default;
     
     void SetTimeline(otio::SerializableObject::Retainer<otio::Timeline> t) {
         _timeline = t;
         nodeMap.clear();
-        nextId = 2;
-        nodeMap[(TimelineNode){1}] = otio::dynamic_retainer_cast<otio::Item>(t);
-        nullName = "<null>";
+        if (t.value != nullptr) {
+            nextId = 2;
+            nodeMap[(TimelineNode){1}] = otio::dynamic_retainer_cast<otio::Item>(t);
+        }
     }
     
     std::vector<std::string> NodeKindNames() const override {

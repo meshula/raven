@@ -313,8 +313,8 @@ void MainInit(int argc, char** argv, int initial_width, int initial_height) {
     if (argc > 1) {
         LoadFile(argv[1]);
     } else {
-        auto tl = new otio::Timeline();
-        LoadTimeline(tl);
+        //auto tl = new otio::Timeline();
+        //LoadTimeline(tl);
     }
 }
 
@@ -620,7 +620,7 @@ void DrawMenu() {
                 dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
             if (ImGui::MenuItem("Close", NULL, false,
                                 op->_timeline)) {
-                op->_timeline = NULL;
+                op->SetTimeline(nullptr);
                 SelectObject(NULL);
             }
 #ifndef EMSCRIPTEN
