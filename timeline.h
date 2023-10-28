@@ -1,17 +1,104 @@
 // Timeline widget
 #ifndef RAVEN_TIMELINE_WIDGET_H
 #define RAVEN_TIMELINE_WIDGET_H
+#include <opentimelineio/serializableObject.h>
 #include <opentimelineio/timeline.h>
 namespace otio = opentimelineio::OPENTIMELINEIO_VERSION;
 
+#include <map>
+#include <string>
+#include <vector>
+
+struct TimelineNode {
+    uint64_t id;
+};
+
+struct cmp_TimelineNode {
+    bool operator()(const TimelineNode& a, const TimelineNode& b) const {
+        return a.id < b.id;
+    }
+};
+
+inline bool operator== (const TimelineNode& a, const TimelineNode& b) {
+    return a.id == b.id;
+}
+
+
+constexpr inline TimelineNode TimelineNodeNull() { return { 0 }; }
+
 class TimelineProvider {
 public:
+    otio::SerializableObject::Retainer<otio::Timeline> _timeline;
+
     virtual ~TimelineProvider() = default;
-    otio::SerializableObject::Retainer<otio::Timeline> timeline;
+    
+    TimelineNode HasSequentialSibling(TimelineNode) const;
+    TimelineNode HasSynchronousSibling(TimelineNode) const;
+    TimelineNode HasParent(TimelineNode) const;
+    
+    virtual std::vector<std::string> NodeKindNames() const = 0;
+    virtual const std::string& NodeKindName(TimelineNode) const = 0;
+    virtual otio::TimeRange TimeRange(TimelineNode) const = 0;
+    virtual otio::RationalTime StartTime(TimelineNode) const = 0;
+    virtual otio::RationalTime Duration(TimelineNode) const = 0;
+    virtual TimelineNode RootNode() const = 0;
 };
 
 class OTIOProvider : public TimelineProvider {
+    std::map<TimelineNode, otio::SerializableObject::Retainer<otio::Item>,
+             cmp_TimelineNode> nodeMap;
+    uint64_t nextId = 0;
+    std::string nullName;
 public:
+    OTIOProvider() = default;
+    virtual ~OTIOProvider() = default;
+    
+    void SetTimeline(otio::SerializableObject::Retainer<otio::Timeline> t) {
+        _timeline = t;
+        nodeMap.clear();
+        nextId = 2;
+        nodeMap[(TimelineNode){1}] = otio::dynamic_retainer_cast<otio::Item>(t);
+        nullName = "<null>";
+    }
+    
+    std::vector<std::string> NodeKindNames() const override {
+        return {};
+    }
+    const std::string& NodeKindName(TimelineNode) const override {
+        return nullName;
+    }
+    otio::TimeRange TimeRange(TimelineNode) const override {
+        return otio::TimeRange();
+    }
+    otio::RationalTime StartTime(TimelineNode) const override {
+        auto it = nodeMap.find({1});
+        if (it == nodeMap.end()) {
+            return otio::RationalTime();
+        }
+        return it->second->trimmed_range().start_time();
+    }
+    otio::RationalTime Duration(TimelineNode) const override {
+        auto it = nodeMap.find({1});
+        if (it == nodeMap.end()) {
+            return otio::RationalTime();
+        }
+        return it->second->duration();
+    }
+    TimelineNode RootNode() const override {
+        auto it = nodeMap.find({1});
+        if (it == nodeMap.end()) {
+            return TimelineNodeNull();
+        }
+        return it->first;
+    }
+
+    otio::SerializableObject::Retainer<otio::Item> OtioItemFromNode(TimelineNode n) {
+        auto it = nodeMap.find(n);
+        if (it == nodeMap.end()) {
+            return {};
+        }
+        return it->second;
+    }
 };
 
 /*

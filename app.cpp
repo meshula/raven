@@ -234,7 +234,8 @@ std::string otio_error_string(otio::ErrorStatus const& error_status) {
 }
 
 void LoadTimeline(otio::Timeline* timeline) {
-    appState.timelinePH.provider->timeline = timeline;
+    OTIOProvider* provider = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    provider->SetTimeline(timeline);
     DetectPlayheadLimits();
     appState.timelinePH.playhead = appState.timelinePH.playhead_limit.start_time();
     FitZoomWholeTimeline();
@@ -269,7 +270,8 @@ void LoadFile(std::string path) {
 }
 
 void SaveFile(std::string path) {
-    auto timeline = appState.timelinePH.provider->timeline;
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    auto timeline = op->_timeline;
     if (!timeline)
         return;
 
@@ -614,9 +616,11 @@ void DrawMenu() {
             if (ImGui::MenuItem("Revert")) {
                 LoadFile(appState.file_path);
             }
+            OTIOProvider* op =
+                dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
             if (ImGui::MenuItem("Close", NULL, false,
-                                appState.timelinePH.provider->timeline)) {
-                appState.timelinePH.provider->timeline = NULL;
+                                op->_timeline)) {
+                op->_timeline = NULL;
                 SelectObject(NULL);
             }
 #ifndef EMSCRIPTEN
@@ -816,14 +820,14 @@ void SnapPlayhead() {
 }
 
 void DetectPlayheadLimits() {
-    const auto timeline = appState.timelinePH.provider->timeline;
+    const auto timeline = appState.timelinePH.provider->_timeline;
     appState.timelinePH.playhead_limit = otio::TimeRange(
         timeline->global_start_time().value_or(otio::RationalTime()),
         timeline->duration());
 }
 
 void FitZoomWholeTimeline() {
-    const auto timeline = appState.timelinePH.provider->timeline;
+    const auto timeline = appState.timelinePH.provider->_timeline;
     appState.timelinePH.scale =
         appState.timelinePH.timeline_width / timeline->duration().to_seconds();
 }

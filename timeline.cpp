@@ -42,11 +42,12 @@ TimeScalarForItem(otio::Item* item) {
 // any source_range offsets in intermediate levels of nesting in the
 // composition.
 void TopLevelTimeRangeMap(
-    TimelineProvider* provider,
-    std::map<otio::Composable*, otio::TimeRange>& range_map,
-    otio::Item* context) {
+        TimelineProvider* provider,
+        std::map<otio::Composable*, otio::TimeRange>& range_map,
+        otio::Item* context) {
     auto zero = otio::RationalTime();
-    auto top = provider->timeline->tracks();
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(provider);
+    auto top = op->_timeline->tracks();
     auto offset = context->transformed_time(zero, top);
 
     for (auto& pair : range_map) {
@@ -56,12 +57,12 @@ void TopLevelTimeRangeMap(
 }
 
 void DrawItem(
-    TimelineProviderHarness* tp,
-    otio::Item* item,
-    float scale,
-    ImVec2 origin,
-    float height,
-    std::map<otio::Composable*, otio::TimeRange>& range_map) {
+        TimelineProviderHarness* tp,
+        otio::Item* item,
+        float scale,
+        ImVec2 origin,
+        float height,
+        std::map<otio::Composable*, otio::TimeRange>& range_map) {
     auto duration = item->duration();
     auto trimmed_range = item->trimmed_range();
     float width = duration.to_seconds() * scale;
@@ -742,15 +743,15 @@ void DrawTrack(
 }
 
 void DrawTimecodeRuler(
-    TimelineProviderHarness* tp,
-    const void* ptr_id,
-    otio::RationalTime start,
-    otio::RationalTime end,
-    float frame_rate,
-    float time_scalar,
-    float zoom_scale,
-    float width,
-    float height) {
+        TimelineProviderHarness* tp,
+        const void* ptr_id,
+        otio::RationalTime start,
+        otio::RationalTime end,
+        float frame_rate,
+        float time_scalar,
+        float zoom_scale,
+        float width,
+        float height) {
     double scale = zoom_scale / time_scalar;
 
     ImVec2 size(width, height);
@@ -1274,7 +1275,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     // ImGuiStyle& style = ImGui::GetStyle();
     // ImGuiIO& io = ImGui::GetIO();
 
-    if (tp->provider->timeline.value == NULL) {
+    if (tp->provider->RootNode() == TimelineNodeNull()) {
         ImGui::BeginGroup();
         ImGui::Text("No timeline");
         ImGui::EndGroup();
@@ -1289,8 +1290,9 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
     auto playhead_string = FormattedStringFromTime(playhead);
 
-    auto video_tracks = tp->provider->timeline->video_tracks();
-    auto audio_tracks = tp->provider->timeline->audio_tracks();
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    auto video_tracks = op->_timeline->video_tracks();
+    auto audio_tracks = op->_timeline->audio_tracks();
 
     // Tracks
 
@@ -1329,7 +1331,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
         ImGui::TableNextColumn();
 
-        DrawObjectLabel(tp, tp->provider->timeline, tp->track_height);
+        DrawObjectLabel(tp, op->_timeline, tp->track_height);
 
         ImGui::TableNextColumn();
 
@@ -1350,7 +1352,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         std::map<otio::Composable*, otio::TimeRange> empty_map;
         DrawMarkers(
             tp,
-            tp->provider->timeline->tracks(),
+            op->_timeline->tracks(),
             tp->scale,
             origin,
             tp->track_height,
