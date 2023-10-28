@@ -1,5 +1,6 @@
 // Inspector
 
-void DrawInspector();
+class TimelineProviderHarness;
+void DrawInspector(TimelineProviderHarness*);
 void DrawJSONInspector();
-void DrawMarkersInspector();
+void DrawMarkersInspector(TimelineProviderHarness*);

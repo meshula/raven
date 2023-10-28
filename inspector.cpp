@@ -458,11 +458,11 @@ void DrawLinearTimeWarp(otio::LinearTimeWarp* timewarp, otio::Item* item) {
     }
 }
 
-void DrawInspector() {
-    auto selected_object = appState.selected_object;
+void DrawInspector(TimelineProviderHarness* tp) {
+    auto selected_object = tp->selected_object;
     auto selected_context = appState.selected_context;
 
-    auto playhead = appState.playhead;
+    auto playhead = tp->playhead;
 
     if (!selected_object) {
         ImGui::Text("Nothing selected.");
@@ -607,7 +607,7 @@ void DrawInspector() {
     }
 }
 
-void DrawMarkersInspector() {
+void DrawMarkersInspector(TimelineProviderHarness* tp) {
     // This temporary variable is used only for a moment to convert
     // between the datatypes that OTIO uses vs the one that ImGui widget uses.
     char tmp_str[1000];
@@ -615,15 +615,15 @@ void DrawMarkersInspector() {
     typedef std::pair<otio::SerializableObject::Retainer<otio::Marker>, otio::SerializableObject::Retainer<otio::Item>> marker_parent_pair;
     std::vector<marker_parent_pair> pairs;
 
-    auto root = appState.timeline->tracks();
-    auto global_start = appState.timeline->global_start_time().value_or(otio::RationalTime());
+    auto root = appState.timelinePH.provider->timeline->tracks();
+    auto global_start = appState.timelinePH.provider->timeline->global_start_time().value_or(otio::RationalTime());
 
     for (const auto& marker : root->markers()) {
         pairs.push_back(marker_parent_pair(marker, root));
     }
 
     for (const auto& child :
-         appState.timeline->tracks()->find_children())
+         appState.timelinePH.provider->timeline->tracks()->find_children())
     {
         if (const auto& item = dynamic_cast<otio::Item*>(&*child))
         {
@@ -671,12 +671,12 @@ void DrawMarkersInspector() {
             auto global_time = parent->transformed_time(range.start_time(), root) + global_start;
 
             auto is_selected =
-                (appState.selected_object == marker) ||
-                (appState.selected_object == parent);
+                (tp->selected_object == marker) ||
+                (tp->selected_object == parent);
             if (ImGui::Selectable(TimecodeStringFromTime(global_time).c_str(),
                                   is_selected,
                                   selectable_flags)) {
-                appState.playhead = global_time;
+                tp->playhead = global_time;
                 SelectObject(marker, parent);
                 appState.scroll_to_playhead = true;
             }

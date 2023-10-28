@@ -7,6 +7,8 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include "timeline.h"
+
 #include <opentimelineio/timeline.h>
 namespace otio = opentimelineio::OPENTIMELINEIO_VERSION;
 
@@ -83,17 +85,14 @@ struct AppState {
 
     // This holds the main timeline object.
     // Pretty much everything drills into this one entry point.
-    otio::SerializableObject::Retainer<otio::Timeline> timeline;
+    TimelineProviderHarness timelinePH;
 
     // Timeline display settings
     float timeline_width = 100.0f; // automatically calculated (pixels)
     float scale = 100.0f; // zoom scale, measured in pixels per second
     float default_track_height = 30.0f; // (pixels)
     float track_height = 30.0f; // current track height (pixels)
-    otio::RationalTime playhead;
     bool scroll_to_playhead = false; // temporary flag, only true until next frame
-    otio::TimeRange
-        playhead_limit; // min/max limit for moving the playhead, auto-calculated
     float zebra_factor = 0.1; // opacity of the per-frame zebra stripes
 
     bool snap_to_frames = true; // user preference to snap the playhead, times,
@@ -105,7 +104,6 @@ struct AppState {
     opentime::IsDropFrameRate drop_frame_mode = opentime::InferFromRate;
 
     // Selection.
-    otio::SerializableObject* selected_object; // maybe NULL
     otio::SerializableObject*
         selected_context; // often NULL, parent to the selected object for OTIO
     // objects which don't track their parent

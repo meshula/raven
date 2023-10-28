@@ -234,9 +234,9 @@ std::string otio_error_string(otio::ErrorStatus const& error_status) {
 }
 
 void LoadTimeline(otio::Timeline* timeline) {
-    appState.timeline = timeline;
+    appState.timelinePH.provider->timeline = timeline;
     DetectPlayheadLimits();
-    appState.playhead = appState.playhead_limit.start_time();
+    appState.timelinePH.playhead = appState.timelinePH.playhead_limit.start_time();
     FitZoomWholeTimeline();
     SelectObject(timeline);
 }
@@ -269,7 +269,7 @@ void LoadFile(std::string path) {
 }
 
 void SaveFile(std::string path) {
-    auto timeline = appState.timeline;
+    auto timeline = appState.timelinePH.provider->timeline;
     if (!timeline)
         return;
 
@@ -304,6 +304,9 @@ void MainInit(int argc, char** argv, int initial_width, int initial_height) {
     ApplyAppStyle();
 
     LoadFonts();
+    
+    appState.timelinePH.provider = std::make_unique<OTIOProvider>();
+    appState.timelinePH.drawPanZoomer = true;
 
     if (argc > 1) {
         LoadFile(argv[1]);
@@ -463,11 +466,11 @@ void MainGui() {
         contentSize.y -= ImGui::GetTextLineHeightWithSpacing() + 7;
         ImGui::BeginChild("##TimelineContainer", contentSize);
 
-        DrawTimeline(appState.timeline);
+        DrawTimeline(&appState.timelinePH);
 
         ImGui::EndChild();
 
-        if (DrawTransportControls(appState.timeline)) {
+        if (DrawTransportControls(&appState.timelinePH)) {
             appState.scroll_to_playhead = true;
         }
     }
@@ -476,7 +479,7 @@ void MainGui() {
     ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
     visible = ImGui::Begin("Inspector", NULL, window_flags);
     if (visible) {
-        DrawInspector();
+        DrawInspector(&appState.timelinePH);
     }
     ImGui::End();
 
@@ -490,7 +493,7 @@ void MainGui() {
     ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
     visible = ImGui::Begin("Markers", NULL, window_flags);
     if (visible) {
-        DrawMarkersInspector();
+        DrawMarkersInspector(&appState.timelinePH);
     }
     ImGui::End();
 
@@ -611,8 +614,9 @@ void DrawMenu() {
             if (ImGui::MenuItem("Revert")) {
                 LoadFile(appState.file_path);
             }
-            if (ImGui::MenuItem("Close", NULL, false, appState.timeline)) {
-                appState.timeline = NULL;
+            if (ImGui::MenuItem("Close", NULL, false,
+                                appState.timelinePH.provider->timeline)) {
+                appState.timelinePH.provider->timeline = NULL;
                 SelectObject(NULL);
             }
 #ifndef EMSCRIPTEN
@@ -650,7 +654,7 @@ void DrawMenu() {
                     "Delete",
                     NULL,
                     false,
-                    appState.selected_object != NULL)) {
+                    appState.timelinePH.selected_object != NULL)) {
                 DeleteSelectedObject();
             }
             ImGui::EndMenu();
@@ -780,7 +784,7 @@ void DrawToolbar(ImVec2 button_size) {
 void SelectObject(
     otio::SerializableObject* object,
     otio::SerializableObject* context) {
-    appState.selected_object = object;
+    appState.timelinePH.selected_object = object;
     appState.selected_context = context;
 
     if (object == NULL) {
@@ -796,30 +800,31 @@ void SelectObject(
 }
 
 void SeekPlayhead(double seconds) {
-    double lower_limit = appState.playhead_limit.start_time().to_seconds();
-    double upper_limit = appState.playhead_limit.end_time_exclusive().to_seconds();
+    double lower_limit = appState.timelinePH.playhead_limit.start_time().to_seconds();
+    double upper_limit = appState.timelinePH.playhead_limit.end_time_exclusive().to_seconds();
     seconds = fmax(lower_limit, fmin(upper_limit, seconds));
-    appState.playhead = otio::RationalTime::from_seconds(seconds, appState.playhead.rate());
+    appState.timelinePH.playhead = otio::RationalTime::from_seconds(seconds, appState.timelinePH.playhead.rate());
     if (appState.snap_to_frames) {
         SnapPlayhead();
     }
 }
 
 void SnapPlayhead() {
-    appState.playhead = otio::RationalTime::from_frames(
-        appState.playhead.to_frames(),
-        appState.playhead.rate());
+    appState.timelinePH.playhead = otio::RationalTime::from_frames(
+                                        appState.timelinePH.playhead.to_frames(),
+                                        appState.timelinePH.playhead.rate());
 }
 
 void DetectPlayheadLimits() {
-    const auto timeline = appState.timeline;
-    appState.playhead_limit = otio::TimeRange(
+    const auto timeline = appState.timelinePH.provider->timeline;
+    appState.timelinePH.playhead_limit = otio::TimeRange(
         timeline->global_start_time().value_or(otio::RationalTime()),
         timeline->duration());
 }
 
 void FitZoomWholeTimeline() {
-    appState.scale = appState.timeline_width / appState.timeline->duration().to_seconds();
+    const auto timeline = appState.timelinePH.provider->timeline;
+    appState.scale = appState.timeline_width / timeline->duration().to_seconds();
 }
 
 std::string FormattedStringFromTime(otio::RationalTime time, bool allow_rate) {

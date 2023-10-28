@@ -42,10 +42,11 @@ TimeScalarForItem(otio::Item* item) {
 // any source_range offsets in intermediate levels of nesting in the
 // composition.
 void TopLevelTimeRangeMap(
+    TimelineProvider* provider,
     std::map<otio::Composable*, otio::TimeRange>& range_map,
     otio::Item* context) {
     auto zero = otio::RationalTime();
-    auto top = appState.timeline->tracks();
+    auto top = provider->timeline->tracks();
     auto offset = context->transformed_time(zero, top);
 
     for (auto& pair : range_map) {
@@ -150,7 +151,7 @@ void DrawItem(
         SelectObject(item);
     }
 
-    if (appState.selected_object == item) {
+    if (appState.timelinePH.selected_object == item) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -297,7 +298,7 @@ void DrawTransition(
         SelectObject(transition);
     }
 
-    if (appState.selected_object == transition) {
+    if (appState.timelinePH.selected_object == transition) {
         fill_color = selected_fill_color;
     }
 
@@ -408,14 +409,14 @@ void DrawEffects(
         if (ImGui::IsItemClicked()) {
             SelectObject(effect, item);
         }
-        if (appState.selected_object == effect) {
+        if (appState.timelinePH.selected_object == effect) {
             fill_color = selected_fill_color;
         }
     } else {
         if (ImGui::IsItemClicked()) {
             SelectObject(item);
         }
-        if (appState.selected_object == item) {
+        if (appState.timelinePH.selected_object == item) {
             fill_color = selected_fill_color;
         }
     }
@@ -522,7 +523,7 @@ void DrawMarkers(
         if (ImGui::IsItemClicked()) {
             SelectObject(marker, item);
         }
-        if (appState.selected_object == marker) {
+        if (appState.timelinePH.selected_object == marker) {
             fill_color = selected_fill_color;
         }
 
@@ -595,7 +596,7 @@ void DrawObjectLabel(otio::SerializableObjectWithMetadata* object, float height)
         SelectObject(object);
     }
 
-    if (appState.selected_object == object) {
+    if (appState.timelinePH.selected_object == object) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -654,7 +655,7 @@ void DrawTrackLabel(otio::Track* track, int index, float height) {
         SelectObject(track);
     }
 
-    if (appState.selected_object == track) {
+    if (appState.timelinePH.selected_object == track) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -691,6 +692,7 @@ void DrawTrackLabel(otio::Track* track, int index, float height) {
 }
 
 void DrawTrack(
+    TimelineProvider* provider,
     otio::Track* track,
     int index,
     float scale,
@@ -707,7 +709,7 @@ void DrawTrack(
             otio_error_string(error_status).c_str());
         assert(false);
     }
-    TopLevelTimeRangeMap(range_map, track);
+    TopLevelTimeRangeMap(provider, range_map, track);
 
     for (const auto& child : track->children()) {
         if (const auto& item = dynamic_cast<otio::Item*>(child.value)) {
@@ -1045,22 +1047,22 @@ float DrawPlayhead(
     return playhead_scroll_x;
 }
 
-bool DrawTransportControls(otio::Timeline* timeline) {
+bool DrawTransportControls(TimelineProviderHarness* tp) {
     bool moved_playhead = false;
 
-    auto start = appState.playhead_limit.start_time();
-    auto duration = appState.playhead_limit.duration();
-    auto end = appState.playhead_limit.end_time_exclusive();
+    auto start = tp->playhead_limit.start_time();
+    auto duration = tp->playhead_limit.duration();
+    auto end = tp->playhead_limit.end_time_exclusive();
     auto rate = duration.rate();
-    if (appState.playhead.rate() != rate) {
-        appState.playhead = appState.playhead.rescaled_to(rate);
+    if (tp->playhead.rate() != rate) {
+        tp->playhead = tp->playhead.rescaled_to(rate);
         if (appState.snap_to_frames) {
             SnapPlayhead();
         }
     }
 
     auto start_string = FormattedStringFromTime(start);
-    auto playhead_string = FormattedStringFromTime(appState.playhead);
+    auto playhead_string = FormattedStringFromTime(tp->playhead);
     auto end_string = FormattedStringFromTime(end);
 
     ImGui::PushID("##TransportControls");
@@ -1070,12 +1072,12 @@ bool DrawTransportControls(otio::Timeline* timeline) {
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(-270);
-    float playhead_seconds = appState.playhead.to_seconds();
+    float playhead_seconds = tp->playhead.to_seconds();
     if (ImGui::SliderFloat(
             "##Playhead",
             &playhead_seconds,
-            appState.playhead_limit.start_time().to_seconds(),
-            appState.playhead_limit.end_time_exclusive().to_seconds(),
+            tp->playhead_limit.start_time().to_seconds(),
+            tp->playhead_limit.end_time_exclusive().to_seconds(),
             playhead_string.c_str())) {
         SeekPlayhead(playhead_seconds);
         moved_playhead = true;
@@ -1107,131 +1109,131 @@ bool DrawTransportControls(otio::Timeline* timeline) {
     ImGui::EndGroup();
     ImGui::PopID();
 
-#ifdef PAN_ZOOMER
-    //-------------------------------------------------------------------------
-    // pan zoomer
-
-    static float s_max_timeline_value = 100.f;
-    static float s_pixel_offset = 0.f;
-
-    static double s_time_in = 0.f;
-    static double s_time_out = 1.f;
-
-    static double s_time_offset = 0;
-    static double s_time_scale = 1;
-
-    static const float TIMELINE_RADIUS = 12;
-
-    ImGuiWindow* win = ImGui::GetCurrentWindow();
-    const float columnOffset = ImGui::GetColumnOffset(1);
-    const float columnWidth = ImGui::GetColumnWidth(1) - GImGui->Style.ScrollbarSize;
-    const ImU32 pz_inactive_color = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_Button]);
-    const ImU32 pz_active_color = ImGui::ColorConvertFloat4ToU32(
-        GImGui->Style.Colors[ImGuiCol_ButtonHovered]);
-    const ImU32 color = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_Button]);
-    const float rounding = GImGui->Style.ScrollbarRounding;
-
-    // draw bottom axis ribbon outside scrolling region
-    win = ImGui::GetCurrentWindow();
-    float startx = ImGui::GetCursorScreenPos().x + columnOffset;
-    float endy = ImGui::GetWindowContentRegionMax().y + win->Pos.y;
-    ImVec2 tl_start(startx, endy + ImGui::GetTextLineHeightWithSpacing());
-    ImVec2 tl_end(
-        startx + columnWidth,
-        endy + 2 * ImGui::GetTextLineHeightWithSpacing());
-
-    win->DrawList->AddRectFilled(tl_start, tl_end, color, rounding);
-
-    // draw time panzoomer
-
-    double time_in = s_time_in;
-    double time_out = s_time_out;
-
-    float posx[2] = { 0, 0 };
-    double values[2] = { time_in, time_out };
-
-    bool active = false;
-    bool hovered = false;
-    bool changed = false;
-    ImVec2 cursor_pos = { tl_start.x,
-        tl_end.y - ImGui::GetTextLineHeightWithSpacing() };
-
-    for (int i = 0; i < 2; ++i) {
-        ImVec2 pos = cursor_pos;
-        pos.x += columnWidth * float(values[i]);
-        ImGui::SetCursorScreenPos(pos);
-        pos.x += TIMELINE_RADIUS;
-        pos.y += TIMELINE_RADIUS;
-        posx[i] = pos.x;
-
-        ImGui::PushID(i);
-        ImGui::InvisibleButton(
-            "zoompanner",
-            ImVec2(2 * TIMELINE_RADIUS, 2 * TIMELINE_RADIUS));
-        active = ImGui::IsItemActive();
-        if (active || ImGui::IsItemHovered()) {
-            hovered = true;
+    if (tp->drawPanZoomer) {
+        //-------------------------------------------------------------------------
+        // pan zoomer
+        
+        static float s_max_timeline_value = 100.f;
+        static float s_pixel_offset = 0.f;
+        
+        static double s_time_in = 0.f;
+        static double s_time_out = 1.f;
+        
+        static double s_time_offset = 0;
+        static double s_time_scale = 1;
+        
+        static const float TIMELINE_RADIUS = 12;
+        
+        ImGuiWindow* win = ImGui::GetCurrentWindow();
+        const float columnOffset = ImGui::GetColumnOffset(1);
+        const float columnWidth = ImGui::GetColumnWidth(1) - GImGui->Style.ScrollbarSize;
+        const ImU32 pz_inactive_color = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_Button]);
+        const ImU32 pz_active_color = ImGui::ColorConvertFloat4ToU32(
+                                                                     GImGui->Style.Colors[ImGuiCol_ButtonHovered]);
+        const ImU32 color = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_Button]);
+        const float rounding = GImGui->Style.ScrollbarRounding;
+        
+        // draw bottom axis ribbon outside scrolling region
+        win = ImGui::GetCurrentWindow();
+        float startx = ImGui::GetCursorScreenPos().x + columnOffset;
+        float endy = ImGui::GetWindowContentRegionMax().y + win->Pos.y;
+        ImVec2 tl_start(startx, endy + ImGui::GetTextLineHeightWithSpacing());
+        ImVec2 tl_end(
+                      startx + columnWidth,
+                      endy + 2 * ImGui::GetTextLineHeightWithSpacing());
+        
+        win->DrawList->AddRectFilled(tl_start, tl_end, color, rounding);
+        
+        // draw time panzoomer
+        
+        double time_in = s_time_in;
+        double time_out = s_time_out;
+        
+        float posx[2] = { 0, 0 };
+        double values[2] = { time_in, time_out };
+        
+        bool active = false;
+        bool hovered = false;
+        bool changed = false;
+        ImVec2 cursor_pos = { tl_start.x,
+            tl_end.y - ImGui::GetTextLineHeightWithSpacing() };
+        
+        for (int i = 0; i < 2; ++i) {
+            ImVec2 pos = cursor_pos;
+            pos.x += columnWidth * float(values[i]);
+            ImGui::SetCursorScreenPos(pos);
+            pos.x += TIMELINE_RADIUS;
+            pos.y += TIMELINE_RADIUS;
+            posx[i] = pos.x;
+            
+            ImGui::PushID(i);
+            ImGui::InvisibleButton(
+                                   "zoompanner",
+                                   ImVec2(2 * TIMELINE_RADIUS, 2 * TIMELINE_RADIUS));
+            active = ImGui::IsItemActive();
+            if (active || ImGui::IsItemHovered()) {
+                hovered = true;
+            }
+            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
+                values[i] += ImGui::GetIO().MouseDelta.x / columnWidth;
+                changed = hovered = true;
+            }
+            ImGui::PopID();
+            
+            win->DrawList->AddCircleFilled(
+                                           pos,
+                                           TIMELINE_RADIUS,
+                                           ImGui::IsItemActive() || ImGui::IsItemHovered()
+                                           ? pz_active_color
+                                           : pz_inactive_color);
         }
+        
+        if (values[0] > values[1])
+            std::swap(values[0], values[1]);
+        
+        tl_start.x = posx[0];
+        tl_start.y += TIMELINE_RADIUS * 0.5f;
+        tl_end.x = posx[1];
+        tl_end.y = tl_start.y + TIMELINE_RADIUS;
+        
+        ImGui::PushID(-1);
+        ImGui::SetCursorScreenPos(tl_start);
+        
+        ImVec2 zp = tl_end;
+        zp.x -= tl_start.x;
+        zp.y -= tl_start.y;
+        ImGui::InvisibleButton("zoompanner", zp);
         if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
-            values[i] += ImGui::GetIO().MouseDelta.x / columnWidth;
+            values[0] += ImGui::GetIO().MouseDelta.x / columnWidth;
+            values[1] += ImGui::GetIO().MouseDelta.x / columnWidth;
             changed = hovered = true;
         }
         ImGui::PopID();
-
-        win->DrawList->AddCircleFilled(
-            pos,
-            TIMELINE_RADIUS,
-            ImGui::IsItemActive() || ImGui::IsItemHovered()
-                ? pz_active_color
-                : pz_inactive_color);
+        
+        win->DrawList->AddRectFilled(
+                                     tl_start,
+                                     tl_end,
+                                     ImGui::IsItemActive() || ImGui::IsItemHovered() ? pz_active_color
+                                     : pz_inactive_color);
+        
+        for (int i = 0; i < 2; ++i) {
+            if (values[i] < 0)
+                values[i] = 0;
+            if (values[i] > 1)
+                values[i] = 1;
+        }
+        
+        time_in = values[0];
+        time_out = values[1];
+        
+        s_time_in = time_in;
+        s_time_out = time_out;
+        
+        ImGui::SetCursorPosY(
+                             ImGui::GetCursorPosY() + 2 * ImGui::GetTextLineHeightWithSpacing());
+        
+        //-------------------------------------------------------------------------
     }
-
-    if (values[0] > values[1])
-        std::swap(values[0], values[1]);
-
-    tl_start.x = posx[0];
-    tl_start.y += TIMELINE_RADIUS * 0.5f;
-    tl_end.x = posx[1];
-    tl_end.y = tl_start.y + TIMELINE_RADIUS;
-
-    ImGui::PushID(-1);
-    ImGui::SetCursorScreenPos(tl_start);
-
-    ImVec2 zp = tl_end;
-    zp.x -= tl_start.x;
-    zp.y -= tl_start.y;
-    ImGui::InvisibleButton("zoompanner", zp);
-    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
-        values[0] += ImGui::GetIO().MouseDelta.x / columnWidth;
-        values[1] += ImGui::GetIO().MouseDelta.x / columnWidth;
-        changed = hovered = true;
-    }
-    ImGui::PopID();
-
-    win->DrawList->AddRectFilled(
-        tl_start,
-        tl_end,
-        ImGui::IsItemActive() || ImGui::IsItemHovered() ? pz_active_color
-                                                        : pz_inactive_color);
-
-    for (int i = 0; i < 2; ++i) {
-        if (values[i] < 0)
-            values[i] = 0;
-        if (values[i] > 1)
-            values[i] = 1;
-    }
-
-    time_in = values[0];
-    time_out = values[1];
-
-    s_time_in = time_in;
-    s_time_out = time_out;
-
-    ImGui::SetCursorPosY(
-        ImGui::GetCursorPosY() + 2 * ImGui::GetTextLineHeightWithSpacing());
-
-    //-------------------------------------------------------------------------
-#endif
     
     return moved_playhead;
 }
@@ -1259,27 +1261,27 @@ void DrawTrackSplitter(const char* str_id, float splitter_size) {
     ImGui::Dummy(ImVec2(splitter_size, splitter_size));
 }
 
-void DrawTimeline(otio::Timeline* timeline) {
+void DrawTimeline(TimelineProviderHarness* tp) {
     // ImGuiStyle& style = ImGui::GetStyle();
     // ImGuiIO& io = ImGui::GetIO();
 
-    if (timeline == NULL) {
+    if (tp->provider->timeline.value == NULL) {
         ImGui::BeginGroup();
         ImGui::Text("No timeline");
         ImGui::EndGroup();
         return;
     }
 
-    auto playhead = appState.playhead;
+    auto playhead = tp->playhead;
 
-    auto start = appState.playhead_limit.start_time();
-    auto duration = appState.playhead_limit.duration();
-    auto end = appState.playhead_limit.end_time_exclusive();
+    auto start = tp->playhead_limit.start_time();
+    auto duration = tp->playhead_limit.duration();
+    auto end = tp->playhead_limit.end_time_exclusive();
 
     auto playhead_string = FormattedStringFromTime(playhead);
 
-    auto video_tracks = timeline->video_tracks();
-    auto audio_tracks = timeline->audio_tracks();
+    auto video_tracks = tp->provider->timeline->video_tracks();
+    auto audio_tracks = tp->provider->timeline->audio_tracks();
 
     // Tracks
 
@@ -1318,7 +1320,7 @@ void DrawTimeline(otio::Timeline* timeline) {
         ImGui::TableNextRow(ImGuiTableRowFlags_None, appState.track_height);
         ImGui::TableNextColumn();
 
-        DrawObjectLabel(timeline, appState.track_height);
+        DrawObjectLabel(tp->provider->timeline, appState.track_height);
 
         ImGui::TableNextColumn();
 
@@ -1338,7 +1340,7 @@ void DrawTimeline(otio::Timeline* timeline) {
 
         std::map<otio::Composable*, otio::TimeRange> empty_map;
         DrawMarkers(
-            timeline->tracks(),
+            tp->provider->timeline->tracks(),
             appState.scale,
             origin,
             appState.track_height,
@@ -1370,6 +1372,7 @@ void DrawTimeline(otio::Timeline* timeline) {
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
+                    tp->provider.get(),
                     video_track,
                     index,
                     appState.scale,
@@ -1398,6 +1401,7 @@ void DrawTimeline(otio::Timeline* timeline) {
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
+                    tp->provider.get(),
                     audio_track,
                     index,
                     appState.scale,
