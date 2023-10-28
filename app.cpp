@@ -295,7 +295,7 @@ void SaveFile(std::string path) {
 }
 
 void MainInit(int argc, char** argv, int initial_width, int initial_height) {
-    appState.timeline_width = initial_width * 0.8f;
+    appState.timelinePH.timeline_width = initial_width * 0.8f;
 
     // Don't auto-save imgui.ini state file
     ImGuiIO& io = ImGui::GetIO();
@@ -471,7 +471,7 @@ void MainGui() {
         ImGui::EndChild();
 
         if (DrawTransportControls(&appState.timelinePH)) {
-            appState.scroll_to_playhead = true;
+            appState.timelinePH.scroll_to_playhead = true;
         }
     }
     ImGui::End();
@@ -501,9 +501,9 @@ void MainGui() {
     visible = ImGui::Begin("Settings", NULL, window_flags);
     if (visible) {
 
-        ImGui::DragFloat("Zebra Factor", &appState.zebra_factor, 0.001, 0, 1);
+        ImGui::DragFloat("Zebra Factor", &appState.timelinePH.zebra_factor, 0.001, 0, 1);
 
-        ImGui::Checkbox("Snap to Frames", &appState.snap_to_frames);
+        ImGui::Checkbox("Snap to Frames", &appState.timelinePH.snap_to_frames);
 
         ImGui::Text("Display Times:");
         ImGui::Indent();
@@ -634,8 +634,8 @@ void DrawMenu() {
             if (ImGui::MenuItem(
                     "Snap to Frames",
                     NULL,
-                    &appState.snap_to_frames)) {
-                if (appState.snap_to_frames) {
+                    &appState.timelinePH.snap_to_frames)) {
+                if (appState.timelinePH.snap_to_frames) {
                     SnapPlayhead();
                 }
             }
@@ -661,14 +661,14 @@ void DrawMenu() {
         }
 
         if (ImGui::BeginMenu("View")) {
-            bool showTimecodeOnClips = appState.track_height >= appState.default_track_height * 2;
+            bool showTimecodeOnClips = appState.timelinePH.track_height >= appState.default_track_height * 2;
             if (ImGui::MenuItem(
                     "Show Time on Clips",
                     NULL,
                     &showTimecodeOnClips)) {
-                appState.track_height = showTimecodeOnClips
-                    ? appState.default_track_height * 2
-                    : appState.default_track_height;
+                        appState.timelinePH.track_height = showTimecodeOnClips
+                        ? appState.default_track_height * 2
+                        : appState.default_track_height;
             }
             ImGui::Text("Display Times:");
             ImGui::Indent();
@@ -804,7 +804,7 @@ void SeekPlayhead(double seconds) {
     double upper_limit = appState.timelinePH.playhead_limit.end_time_exclusive().to_seconds();
     seconds = fmax(lower_limit, fmin(upper_limit, seconds));
     appState.timelinePH.playhead = otio::RationalTime::from_seconds(seconds, appState.timelinePH.playhead.rate());
-    if (appState.snap_to_frames) {
+    if (appState.timelinePH.snap_to_frames) {
         SnapPlayhead();
     }
 }
@@ -824,7 +824,8 @@ void DetectPlayheadLimits() {
 
 void FitZoomWholeTimeline() {
     const auto timeline = appState.timelinePH.provider->timeline;
-    appState.scale = appState.timeline_width / timeline->duration().to_seconds();
+    appState.timelinePH.scale =
+        appState.timelinePH.timeline_width / timeline->duration().to_seconds();
 }
 
 std::string FormattedStringFromTime(otio::RationalTime time, bool allow_rate) {

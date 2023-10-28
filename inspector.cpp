@@ -121,13 +121,14 @@ std::string DrawColorChooser(std::string current_color_name)
 }
 
 bool DrawRationalTime(
+    TimelineProviderHarness* tp,
     const char* label,
     otio::RationalTime* time,
     bool allow_negative = false) {
     if (time == NULL)
         return false;
     auto formatted = FormattedStringFromTime(*time);
-    if (appState.snap_to_frames) {
+    if (tp->snap_to_frames) {
         int val = floor(time->value()); // snap with floor()
         if (ImGui::DragInt(
                 label,
@@ -188,11 +189,11 @@ bool DrawTimeRange(
 
     char buf[100];
     snprintf(buf, sizeof(buf), "Start##%s", label);
-    if (DrawRationalTime(buf, &start, allow_negative)) {
+    if (DrawRationalTime(&appState.timelinePH, buf, &start, allow_negative)) {
         changed = true;
     }
     snprintf(buf, sizeof(buf), "Duration##%s", label);
-    if (DrawRationalTime(buf, &duration, false)) { // never negative
+    if (DrawRationalTime(&appState.timelinePH, buf, &duration, false)) { // never negative
         changed = true;
     }
     snprintf(buf, sizeof(buf), "End##%s", label);
@@ -500,7 +501,7 @@ void DrawInspector(TimelineProviderHarness* tp) {
         auto rate = timeline->global_start_time().value_or(playhead).rate();
         auto global_start_time = timeline->global_start_time().value_or(otio::RationalTime(0, rate));
         // don't allow negative duration - but 0 is okay
-        if (DrawRationalTime("Global Start", &global_start_time, true)) {
+        if (DrawRationalTime(tp, "Global Start", &global_start_time, true)) {
             timeline->set_global_start_time(global_start_time);
             DetectPlayheadLimits();
         }
@@ -534,12 +535,12 @@ void DrawInspector(TimelineProviderHarness* tp) {
     // Transition
     if (const auto& transition = dynamic_cast<otio::Transition*>(selected_object)) {
         auto in_offset = transition->in_offset();
-        if (DrawRationalTime("In Offset", &in_offset, false)) {
+        if (DrawRationalTime(tp, "In Offset", &in_offset, false)) {
             transition->set_in_offset(in_offset);
         }
 
         auto out_offset = transition->out_offset();
-        if (DrawRationalTime("Out Offset", &out_offset, false)) {
+        if (DrawRationalTime(tp, "Out Offset", &out_offset, false)) {
             transition->set_out_offset(out_offset);
         }
 
@@ -678,7 +679,7 @@ void DrawMarkersInspector(TimelineProviderHarness* tp) {
                                   selectable_flags)) {
                 tp->playhead = global_time;
                 SelectObject(marker, parent);
-                appState.scroll_to_playhead = true;
+                appState.timelinePH.scroll_to_playhead = true;
             }
 
             // Duration

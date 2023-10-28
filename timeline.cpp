@@ -30,11 +30,11 @@ TimeScalarForItem(otio::Item* item) {
 }
 
 //otio::RationalTime TopLevelTime(otio::RationalTime time, otio::Item* context) {
-//  return context->transformed_time(time, appState.timeline->tracks());
+//  return context->transformed_time(time, tp->timeline->tracks());
 //}
 //
 //otio::TimeRange TopLevelTimeRange(otio::TimeRange range, otio::Item* context) {
-//  return context->transformed_time_range(range, appState.timeline->tracks());
+//  return context->transformed_time_range(range, tp->timeline->tracks());
 //}
 
 // Transform this range map from the context item's coodinate space
@@ -56,6 +56,7 @@ void TopLevelTimeRangeMap(
 }
 
 void DrawItem(
+    TimelineProviderHarness* tp,
     otio::Item* item,
     float scale,
     ImVec2 origin,
@@ -151,7 +152,7 @@ void DrawItem(
         SelectObject(item);
     }
 
-    if (appState.timelinePH.selected_object == item) {
+    if (tp->selected_object == item) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -211,7 +212,7 @@ void DrawItem(
         float ruler_y_offset = font_height + text_offset.y;
         ImGui::SetCursorPos(
             ImVec2(render_pos.x, render_pos.y + ruler_y_offset));
-        DrawTimecodeRuler(
+        DrawTimecodeRuler(tp,
             item + 1,
             start,
             end,
@@ -247,6 +248,7 @@ void DrawItem(
 }
 
 void DrawTransition(
+    TimelineProviderHarness* tp,
     otio::Transition* transition,
     float scale,
     ImVec2 origin,
@@ -298,7 +300,7 @@ void DrawTransition(
         SelectObject(transition);
     }
 
-    if (appState.timelinePH.selected_object == transition) {
+    if (tp->selected_object == transition) {
         fill_color = selected_fill_color;
     }
 
@@ -332,6 +334,7 @@ void DrawTransition(
 }
 
 void DrawEffects(
+    TimelineProviderHarness* tp,
     otio::Item* item,
     float scale,
     ImVec2 origin,
@@ -409,14 +412,14 @@ void DrawEffects(
         if (ImGui::IsItemClicked()) {
             SelectObject(effect, item);
         }
-        if (appState.timelinePH.selected_object == effect) {
+        if (tp->selected_object == effect) {
             fill_color = selected_fill_color;
         }
     } else {
         if (ImGui::IsItemClicked()) {
             SelectObject(item);
         }
-        if (appState.timelinePH.selected_object == item) {
+        if (tp->selected_object == item) {
             fill_color = selected_fill_color;
         }
     }
@@ -458,6 +461,7 @@ void DrawEffects(
 }
 
 void DrawMarkers(
+    TimelineProviderHarness* tp,
     otio::Item* item,
     float scale,
     ImVec2 origin,
@@ -523,7 +527,7 @@ void DrawMarkers(
         if (ImGui::IsItemClicked()) {
             SelectObject(marker, item);
         }
-        if (appState.timelinePH.selected_object == marker) {
+        if (tp->selected_object == marker) {
             fill_color = selected_fill_color;
         }
 
@@ -566,7 +570,8 @@ void DrawMarkers(
     }
 }
 
-void DrawObjectLabel(otio::SerializableObjectWithMetadata* object, float height) {
+void DrawObjectLabel(TimelineProviderHarness* tp,
+                     otio::SerializableObjectWithMetadata* object, float height) {
     float width = ImGui::GetContentRegionAvail().x;
 
     ImGui::BeginGroup();
@@ -596,7 +601,7 @@ void DrawObjectLabel(otio::SerializableObjectWithMetadata* object, float height)
         SelectObject(object);
     }
 
-    if (appState.timelinePH.selected_object == object) {
+    if (tp->selected_object == object) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -618,7 +623,8 @@ void DrawObjectLabel(otio::SerializableObjectWithMetadata* object, float height)
     ImGui::EndGroup();
 }
 
-void DrawTrackLabel(otio::Track* track, int index, float height) {
+void DrawTrackLabel(TimelineProviderHarness* tp,
+                    otio::Track* track, int index, float height) {
     float width = ImGui::GetContentRegionAvail().x;
 
     ImGui::BeginGroup();
@@ -655,7 +661,7 @@ void DrawTrackLabel(otio::Track* track, int index, float height) {
         SelectObject(track);
     }
 
-    if (appState.timelinePH.selected_object == track) {
+    if (tp->selected_object == track) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -692,7 +698,7 @@ void DrawTrackLabel(otio::Track* track, int index, float height) {
 }
 
 void DrawTrack(
-    TimelineProvider* provider,
+    TimelineProviderHarness* tp,
     otio::Track* track,
     int index,
     float scale,
@@ -709,24 +715,24 @@ void DrawTrack(
             otio_error_string(error_status).c_str());
         assert(false);
     }
-    TopLevelTimeRangeMap(provider, range_map, track);
+    TopLevelTimeRangeMap(tp->provider.get(), range_map, track);
 
     for (const auto& child : track->children()) {
         if (const auto& item = dynamic_cast<otio::Item*>(child.value)) {
-            DrawItem(item, scale, origin, height, range_map);
+            DrawItem(tp, item, scale, origin, height, range_map);
         }
     }
 
     for (const auto& child : track->children()) {
         if (const auto& transition = dynamic_cast<otio::Transition*>(child.value)) {
-            DrawTransition(transition, scale, origin, height, range_map);
+            DrawTransition(tp, transition, scale, origin, height, range_map);
         }
     }
 
     for (const auto& child : track->children()) {
         if (const auto& item = dynamic_cast<otio::Item*>(child.value)) {
-            DrawEffects(item, scale, origin, height, range_map);
-            DrawMarkers(item, scale, origin, height, range_map);
+            DrawEffects(tp, item, scale, origin, height, range_map);
+            DrawMarkers(tp, item, scale, origin, height, range_map);
         }
     }
 
@@ -736,6 +742,7 @@ void DrawTrack(
 }
 
 void DrawTimecodeRuler(
+    TimelineProviderHarness* tp,
     const void* ptr_id,
     otio::RationalTime start,
     otio::RationalTime end,
@@ -770,8 +777,8 @@ void DrawTimecodeRuler(
     auto tick_color = appTheme.colors[AppThemeCol_TickMajor];
     // auto tick2_color = appTheme.colors[AppThemeCol_TickMinor];
     auto tick_label_color = appTheme.colors[AppThemeCol_Label];
-    auto zebra_color_dark = ImColor(0, 0, 0, 255.0 * appState.zebra_factor);
-    auto zebra_color_light = ImColor(255, 255, 255, 255.0 * appState.zebra_factor);
+    auto zebra_color_dark = ImColor(0, 0, 0, 255.0 * tp->zebra_factor);
+    auto zebra_color_light = ImColor(255, 255, 255, 255.0 * tp->zebra_factor);
 
     // background
     // draw_list->AddRectFilled(p0, p1, fill_color);
@@ -866,6 +873,7 @@ void DrawTimecodeRuler(
 }
 
 bool DrawTimecodeTrack(
+    TimelineProviderHarness* tp,
     otio::RationalTime start,
     otio::RationalTime end,
     float frame_rate,
@@ -901,7 +909,7 @@ bool DrawTimecodeTrack(
     }
 
     ImGui::SetCursorPos(old_pos);
-    DrawTimecodeRuler(
+    DrawTimecodeRuler(tp,
         "##TimecodeTrackRuler",
         start,
         end,
@@ -1056,7 +1064,7 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
     auto rate = duration.rate();
     if (tp->playhead.rate() != rate) {
         tp->playhead = tp->playhead.rescaled_to(rate);
-        if (appState.snap_to_frames) {
+        if (tp->snap_to_frames) {
             SnapPlayhead();
         }
     }
@@ -1090,13 +1098,13 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
     ImGui::SetNextItemWidth(100);
     if (ImGui::SliderFloat(
             "##Zoom",
-            &appState.scale,
+            &tp->scale,
             0.1f,
             5000.0f,
             "Zoom",
             ImGuiSliderFlags_Logarithmic)) {
         // never go to 0 or less
-        appState.scale = fmax(0.0001f, appState.scale);
+        tp->scale = fmax(0.0001f, tp->scale);
         moved_playhead = true;
     }
 
@@ -1238,12 +1246,13 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
     return moved_playhead;
 }
 
-void DrawTrackSplitter(const char* str_id, float splitter_size) {
+void DrawTrackSplitter(TimelineProviderHarness* tp,
+                       const char* str_id, float splitter_size) {
     int num_tracks_above = ImGui::TableGetRowIndex();
     float sz1 = 0;
     float sz2 = 0;
     float width = ImGui::GetContentRegionAvail().x;
-    float sz1_min = -(appState.track_height - 25.0f) * num_tracks_above;
+    float sz1_min = -(tp->track_height - 25.0f) * num_tracks_above;
     if (Splitter(
             str_id,
             false,
@@ -1254,9 +1263,9 @@ void DrawTrackSplitter(const char* str_id, float splitter_size) {
             -200,
             width,
             0)) {
-        appState.track_height = fminf(
+        tp->track_height = fminf(
             200.0f,
-            fmaxf(25.0f, appState.track_height + (sz1 / num_tracks_above)));
+            fmaxf(25.0f, tp->track_height + (sz1 / num_tracks_above)));
     }
     ImGui::Dummy(ImVec2(splitter_size, splitter_size));
 }
@@ -1286,9 +1295,9 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     // Tracks
 
     auto available_size = ImGui::GetContentRegionAvail();
-    appState.timeline_width = 0.8f * available_size.x;
+    tp->timeline_width = 0.8f * available_size.x;
 
-    float full_width = duration.to_seconds() * appState.scale;
+    float full_width = duration.to_seconds() * tp->scale;
     float full_height = available_size.y - ImGui::GetFrameHeightWithSpacing();
 
     static ImVec2 cell_padding(2.0f, 0.0f);
@@ -1317,10 +1326,10 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         // Always show the track labels & the playhead track
         ImGui::TableSetupScrollFreeze(1, 1);
 
-        ImGui::TableNextRow(ImGuiTableRowFlags_None, appState.track_height);
+        ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
         ImGui::TableNextColumn();
 
-        DrawObjectLabel(tp->provider->timeline, appState.track_height);
+        DrawObjectLabel(tp, tp->provider->timeline, tp->track_height);
 
         ImGui::TableNextColumn();
 
@@ -1328,22 +1337,23 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         // the timeline.
         auto origin = ImGui::GetCursorPos();
 
-        if (DrawTimecodeTrack(
+        if (DrawTimecodeTrack(tp,
                 start,
                 end,
                 playhead.rate(),
-                appState.scale,
+                tp->scale,
                 full_width,
-                appState.track_height)) {
+                tp->track_height)) {
             // scroll_to_playhead = true;
         }
 
         std::map<otio::Composable*, otio::TimeRange> empty_map;
         DrawMarkers(
+            tp,
             tp->provider->timeline->tracks(),
-            appState.scale,
+            tp->scale,
             origin,
-            appState.track_height,
+            tp->track_height,
             empty_map);
 
         // draw just the top of the playhead in the fixed timecode track
@@ -1351,34 +1361,34 @@ void DrawTimeline(TimelineProviderHarness* tp) {
             start,
             end,
             playhead,
-            appState.scale,
+            tp->scale,
             full_width,
-            appState.track_height,
-            appState.track_height,
+            tp->track_height,
+            tp->track_height,
             origin,
             true);
 
         // now shift the origin down below the timecode track
-        origin.y += appState.track_height;
+        origin.y += tp->track_height;
 
         int index = (int)video_tracks.size();
         for (auto i = video_tracks.rbegin(); i != video_tracks.rend(); ++i)
         // for (const auto& video_track : video_tracks)
         {
             const auto& video_track = *i;
-            ImGui::TableNextRow(ImGuiTableRowFlags_None, appState.track_height);
+            ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
             if (ImGui::TableNextColumn()) {
-                DrawTrackLabel(video_track, index, appState.track_height);
+                DrawTrackLabel(tp, video_track, index, tp->track_height);
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
-                    tp->provider.get(),
+                    tp,
                     video_track,
                     index,
-                    appState.scale,
+                    tp->scale,
                     origin,
                     full_width,
-                    appState.track_height);
+                    tp->track_height);
             }
             index--;
         }
@@ -1389,25 +1399,25 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
         ImGui::TableNextRow(ImGuiTableRowFlags_None, splitter_size);
         ImGui::TableNextColumn();
-        DrawTrackSplitter("##SplitterCol1", splitter_size);
+        DrawTrackSplitter(tp, "##SplitterCol1", splitter_size);
         ImGui::TableNextColumn();
-        DrawTrackSplitter("##SplitterCol2", splitter_size);
+        DrawTrackSplitter(tp, "##SplitterCol2", splitter_size);
 
         index = 1;
         for (const auto& audio_track : audio_tracks) {
-            ImGui::TableNextRow(ImGuiTableRowFlags_None, appState.track_height);
+            ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
             if (ImGui::TableNextColumn()) {
-                DrawTrackLabel(audio_track, index, appState.track_height);
+                DrawTrackLabel(tp, audio_track, index, tp->track_height);
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
-                    tp->provider.get(),
+                    tp,
                     audio_track,
                     index,
-                    appState.scale,
+                    tp->scale,
                     origin,
                     full_width,
-                    appState.track_height);
+                    tp->track_height);
             }
             index++;
         }
@@ -1421,19 +1431,19 @@ void DrawTimeline(TimelineProviderHarness* tp) {
             start,
             end,
             playhead,
-            appState.scale,
+            tp->scale,
             full_width,
-            appState.track_height,
+            tp->track_height,
             full_height,
             origin,
             false);
 
-        if (appState.scroll_to_playhead) {
+        if (tp->scroll_to_playhead) {
             // This is almost the same as calling ImGui::SetScrollX(playhead_x)
             // but aligns to the center instead of to the left edge, which is nicer
             // looking.
             ImGui::SetScrollFromPosX(playhead_x - ImGui::GetScrollX());
-            appState.scroll_to_playhead = false;
+            tp->scroll_to_playhead = false;
         }
 
         // This is helpful when debugging visibility performance optimization

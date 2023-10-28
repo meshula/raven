@@ -88,15 +88,8 @@ struct AppState {
     TimelineProviderHarness timelinePH;
 
     // Timeline display settings
-    float timeline_width = 100.0f; // automatically calculated (pixels)
-    float scale = 100.0f; // zoom scale, measured in pixels per second
     float default_track_height = 30.0f; // (pixels)
-    float track_height = 30.0f; // current track height (pixels)
-    bool scroll_to_playhead = false; // temporary flag, only true until next frame
-    float zebra_factor = 0.1; // opacity of the per-frame zebra stripes
 
-    bool snap_to_frames = true; // user preference to snap the playhead, times,
-        // ranges, etc. to frames
     bool display_timecode = true;
     bool display_frames = false;
     bool display_seconds = false;
