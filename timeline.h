@@ -30,6 +30,7 @@ constexpr inline TimelineNode RootNodeId() { return (TimelineNode){2}; }
 class TimelineProvider {
 protected:
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _syncStarts;
+    std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _seqStarts;
     void clearMaps() { _syncStarts.clear(); }
 
 public:
@@ -52,6 +53,12 @@ public:
     std::vector<TimelineNode> SyncStarts(TimelineNode n) {
         auto it = _syncStarts.find(n);
         if (it == _syncStarts.end())
+            return {};
+        return it->second;  // returns a copy
+    }
+    std::vector<TimelineNode> SeqStarts(TimelineNode n) {
+        auto it = _seqStarts.find(n);
+        if (it == _seqStarts.end())
             return {};
         return it->second;  // returns a copy
     }
@@ -92,14 +99,28 @@ public:
         otio::Stack* stack = t->tracks();
         nodeMap[RootNodeId()] = otio::dynamic_retainer_cast<otio::Item>(t);
         _syncStarts[RootNodeId()] = std::vector<TimelineNode>();
-        auto it = _syncStarts.find(RootNodeId());
+        auto start_it = _syncStarts.find(RootNodeId());
         nextId = 3;
         std::vector<otio::SerializableObject::Retainer<otio::Composable>> const& tracks = stack->children();
-        for (auto track : tracks) {
-            nodeMap[(TimelineNode){nextId}] = otio::dynamic_retainer_cast<otio::Item>(track);
-            it->second.push_back((TimelineNode){nextId}); // register the synchronous start
+        for (auto trackItem : tracks) {
+            otio::SerializableObject::Retainer<otio::Item> track = otio::dynamic_retainer_cast<otio::Item>(trackItem); // Composable to Item
+            nodeMap[(TimelineNode){nextId}] = track;
+            auto trackNode = (TimelineNode){nextId};
+            start_it->second.push_back(trackNode); // register the synchronous start
+            _seqStarts[trackNode] = std::vector<TimelineNode>();
+            auto seq_it = _seqStarts.find(trackNode);
             parentMap[(TimelineNode){nextId}] = DocumentNodeId(); // register the parent
             ++nextId;
+            
+            otio::SerializableObject::Retainer<otio::Track> otrack = otio::dynamic_retainer_cast<otio::Track>(trackItem); // Composable to Item
+            for (const auto& child : otrack->children()) {
+                if (const auto& item = dynamic_cast<otio::Item*>(child.value)) {
+                    parentMap[(TimelineNode){nextId}] = trackNode;
+                    nodeMap[(TimelineNode){nextId}] = item;
+                    seq_it->second.push_back((TimelineNode){nextId}); // register the sequential starts
+                    ++nextId;
+                }
+            }
         }
     }
     

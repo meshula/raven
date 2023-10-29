@@ -694,12 +694,17 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
 
 void DrawTrack(
         TimelineProviderHarness* tp,
-        otio::Track* track,
+        TimelineNode trackNode,
         float scale,
         ImVec2 origin,
         float full_width,
         float height) {
     ImGui::BeginGroup();
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    auto trackItem = op->OtioItemFromNode(trackNode);
+    otio::Track* track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
+    if (!track)
+        return;
 
     otio::ErrorStatus error_status;
     auto range_map = track->range_of_all_children(&error_status);
@@ -709,25 +714,24 @@ void DrawTrack(
             otio_error_string(error_status).c_str());
         assert(false);
     }
-    TopLevelTimeRangeMap(tp->provider.get(), range_map, track);
 
-    for (const auto& child : track->children()) {
-        if (const auto& item = dynamic_cast<otio::Item*>(child.value)) {
+    TopLevelTimeRangeMap(tp->provider.get(), range_map, track);
+    auto children = op->SeqStarts(trackNode);
+
+    for (const auto& child : children) {
+        auto item = op->OtioItemFromNode(child).value;
+        DrawItem(tp, item, scale, origin, height, range_map);
+    }
+    for (const auto& child : children) {
+        auto item = op->OtioItemFromNode(child).value;
+        if (const auto& transition = dynamic_cast<otio::Transition*>(item)) {
             DrawItem(tp, item, scale, origin, height, range_map);
         }
     }
-
-    for (const auto& child : track->children()) {
-        if (const auto& transition = dynamic_cast<otio::Transition*>(child.value)) {
-            DrawTransition(tp, transition, scale, origin, height, range_map);
-        }
-    }
-
-    for (const auto& child : track->children()) {
-        if (const auto& item = dynamic_cast<otio::Item*>(child.value)) {
-            DrawEffects(tp, item, scale, origin, height, range_map);
-            DrawMarkers(tp, item, scale, origin, height, range_map);
-        }
+    for (const auto& child : children) {
+        auto item = op->OtioItemFromNode(child).value;
+        DrawEffects(tp, item, scale, origin, height, range_map);
+        DrawMarkers(tp, item, scale, origin, height, range_map);
     }
 
     ImGui::EndGroup();
@@ -1283,7 +1287,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
     auto playhead_string = FormattedStringFromTime(playhead);
 
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
     auto root = op->RootNode();
     auto tracks = op->SyncStarts(root);
     
@@ -1328,7 +1332,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
         ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
         ImGui::TableNextColumn();
-        OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+        OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
         otio::Timeline* timeline = op->OtioTimeilne();
         DrawObjectLabel(tp, timeline, tp->track_height);
 
@@ -1393,7 +1397,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
                     tp,
-                    vt,
+                    *video_track,
                     tp->scale,
                     origin,
                     full_width,
@@ -1424,7 +1428,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
                 if (ImGui::TableNextColumn()) {
                     DrawTrack(
                         tp,
-                        track,
+                        trackNode,
                         tp->scale,
                         origin,
                         full_width,
