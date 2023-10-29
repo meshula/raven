@@ -458,13 +458,17 @@ void DrawEffects(
 
 void DrawMarkers(
         TimelineProviderHarness* tp,
-        otio::Item* item,
+        TimelineNode itemNode,
         float scale,
         ImVec2 origin,
         float height,
         std::map<otio::Composable*, otio::TimeRange>& range_map) {
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    auto itemComp = op->OtioItemFromNode(itemNode).value;
+    otio::Item* item = dynamic_cast<otio::Item*>(itemComp);
     if (item == nullptr)
         return;
+
     auto markers = item->markers();
     if (markers.size() == 0)
         return;
@@ -741,7 +745,7 @@ void DrawTrack(
         auto item = dynamic_cast<otio::Item*>(comp.value);
         if (item) {
             DrawEffects(tp, item, scale, origin, height, range_map);
-            DrawMarkers(tp, item, scale, origin, height, range_map);
+            DrawMarkers(tp, child, scale, origin, height, range_map);
         }
     }
 
@@ -1364,12 +1368,9 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         }
 
         std::map<otio::Composable*, otio::TimeRange> empty_map;
-        auto topNode = op->RootNode();
-        auto topComp = op->OtioItemFromNode(topNode).value;
-        otio::Item* top = dynamic_cast<otio::Item*>(topComp);
         DrawMarkers(
             tp,
-            top,
+            op->RootNode(),
             tp->scale,
             origin,
             tp->track_height,
