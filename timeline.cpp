@@ -29,14 +29,6 @@ TimeScalarForItem(otio::Item* item) {
     return time_scalar;
 }
 
-//otio::RationalTime TopLevelTime(otio::RationalTime time, otio::Item* context) {
-//  return context->transformed_time(time, tp->timeline->tracks());
-//}
-//
-//otio::TimeRange TopLevelTimeRange(otio::TimeRange range, otio::Item* context) {
-//  return context->transformed_time_range(range, tp->timeline->tracks());
-//}
-
 // Transform this range map from the context item's coodinate space
 // into the top-level timeline's coordinate space. This compensates for
 // any source_range offsets in intermediate levels of nesting in the
@@ -47,9 +39,9 @@ void TopLevelTimeRangeMap(
         otio::Item* context) {
     auto zero = otio::RationalTime();
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(provider);
-    auto top = op->_timeline->tracks();
+    TimelineNode tracksNode = op->RootNode();
+    auto top = op->OtioItemFromNode(tracksNode);
     auto offset = context->transformed_time(zero, top);
-
     for (auto& pair : range_map) {
         auto& range = pair.second;
         range = otio::TimeRange(range.start_time() + offset, range.duration());
@@ -462,12 +454,14 @@ void DrawEffects(
 }
 
 void DrawMarkers(
-    TimelineProviderHarness* tp,
-    otio::Item* item,
-    float scale,
-    ImVec2 origin,
-    float height,
-    std::map<otio::Composable*, otio::TimeRange>& range_map) {
+        TimelineProviderHarness* tp,
+        otio::Item* item,
+        float scale,
+        ImVec2 origin,
+        float height,
+        std::map<otio::Composable*, otio::TimeRange>& range_map) {
+    if (item == nullptr)
+        return;
     auto markers = item->markers();
     if (markers.size() == 0)
         return;
@@ -699,13 +693,12 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
 }
 
 void DrawTrack(
-    TimelineProviderHarness* tp,
-    otio::Track* track,
-    int index,
-    float scale,
-    ImVec2 origin,
-    float full_width,
-    float height) {
+        TimelineProviderHarness* tp,
+        otio::Track* track,
+        float scale,
+        ImVec2 origin,
+        float full_width,
+        float height) {
     ImGui::BeginGroup();
 
     otio::ErrorStatus error_status;
@@ -1291,9 +1284,9 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     auto playhead_string = FormattedStringFromTime(playhead);
 
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    auto video_tracks = op->_timeline->video_tracks();
-    auto audio_tracks = op->_timeline->audio_tracks();
-
+    auto root = op->RootNode();
+    auto tracks = op->SyncStarts(root);
+    
     // Tracks
 
     auto available_size = ImGui::GetContentRegionAvail();
@@ -1355,9 +1348,11 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         }
 
         std::map<otio::Composable*, otio::TimeRange> empty_map;
+        auto topNode = op->RootNode();
+        auto top = op->OtioItemFromNode(topNode).value;
         DrawMarkers(
             tp,
-            op->_timeline->tracks(),
+            top,
             tp->scale,
             origin,
             tp->track_height,
@@ -1378,26 +1373,32 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         // now shift the origin down below the timecode track
         origin.y += tp->track_height;
 
+        // filter the video tracks
+        std::vector<otio::SerializableObject::Retainer<otio::Track> > video_tracks;
+        for (auto trackNode : tracks) {
+            auto item = op->OtioItemFromNode(trackNode);
+            otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(item);
+            if (track->kind() == otio::Track::Kind::video) {
+                video_tracks.push_back(track);
+            }
+        }
+
         int index = (int)video_tracks.size();
-        for (auto i = video_tracks.rbegin(); i != video_tracks.rend(); ++i)
-        // for (const auto& video_track : video_tracks)
-        {
-            const auto& video_track = *i;
+        for (auto video_track = video_tracks.rbegin(); video_track != video_tracks.rend(); ++video_track) {
             ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
             if (ImGui::TableNextColumn()) {
-                DrawTrackLabel(tp, video_track, index, tp->track_height);
+                DrawTrackLabel(tp, *video_track, index, tp->track_height);
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
                     tp,
-                    video_track,
-                    index,
+                    *video_track,
                     tp->scale,
                     origin,
                     full_width,
                     tp->track_height);
             }
-            index--;
+            --index;
         }
 
         // Make a splitter between the Video and Audio tracks
@@ -1411,22 +1412,25 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         DrawTrackSplitter(tp, "##SplitterCol2", splitter_size);
 
         index = 1;
-        for (const auto& audio_track : audio_tracks) {
-            ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
-            if (ImGui::TableNextColumn()) {
-                DrawTrackLabel(tp, audio_track, index, tp->track_height);
+        for (auto trackNode : tracks) {
+            auto item = op->OtioItemFromNode(trackNode);
+            otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(item);
+            if (track->kind() == otio::Track::Kind::audio) {
+                ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
+                if (ImGui::TableNextColumn()) {
+                    DrawTrackLabel(tp, track, index, tp->track_height);
+                }
+                if (ImGui::TableNextColumn()) {
+                    DrawTrack(
+                        tp,
+                        track,
+                        tp->scale,
+                        origin,
+                        full_width,
+                        tp->track_height);
+                }
+                index++;
             }
-            if (ImGui::TableNextColumn()) {
-                DrawTrack(
-                    tp,
-                    audio_track,
-                    index,
-                    tp->scale,
-                    origin,
-                    full_width,
-                    tp->track_height);
-            }
-            index++;
         }
 
         // do this at the very end, so the playhead can overlay everything

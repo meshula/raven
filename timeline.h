@@ -27,6 +27,10 @@ inline bool operator== (const TimelineNode& a, const TimelineNode& b) {
 constexpr inline TimelineNode TimelineNodeNull() { return { 0 }; }
 
 class TimelineProvider {
+protected:
+    std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _syncStarts;
+    void clearMaps() { _syncStarts.clear(); }
+
 public:
     otio::SerializableObject::Retainer<otio::Timeline> _timeline;
 
@@ -42,11 +46,19 @@ public:
     virtual otio::RationalTime StartTime(TimelineNode) const = 0;
     virtual otio::RationalTime Duration(TimelineNode) const = 0;
     virtual TimelineNode RootNode() const = 0;
+    
+    std::vector<TimelineNode> SyncStarts(TimelineNode n) {
+        auto it = _syncStarts.find(n);
+        if (it == _syncStarts.end())
+            return {};
+        return it->second;  // returns a copy
+    }
 };
 
 class OTIOProvider : public TimelineProvider {
     std::map<TimelineNode, otio::SerializableObject::Retainer<otio::Item>,
              cmp_TimelineNode> nodeMap;
+    std::map<TimelineNode, TimelineNode, cmp_TimelineNode> parentMap;
     uint64_t nextId = 0;
     std::string nullName;
 public:
@@ -58,9 +70,24 @@ public:
     void SetTimeline(otio::SerializableObject::Retainer<otio::Timeline> t) {
         _timeline = t;
         nodeMap.clear();
-        if (t.value != nullptr) {
-            nextId = 2;
-            nodeMap[(TimelineNode){1}] = otio::dynamic_retainer_cast<otio::Item>(t);
+        clearMaps();
+        if (t.value == nullptr)
+            return;
+        
+        // add the root
+        nextId = 2;
+        nodeMap[(TimelineNode){1}] = otio::dynamic_retainer_cast<otio::Item>(t);
+        _syncStarts[(TimelineNode){1}] = std::vector<TimelineNode>();
+        auto it = _syncStarts.find((TimelineNode){1});
+
+        // encode the tracks of the timeline's stack as sync starts on the root.
+        otio::Stack* stack = t->tracks();
+        std::vector<otio::SerializableObject::Retainer<otio::Composable>> const& tracks = stack->children();
+        for (auto track : tracks) {
+            nodeMap[(TimelineNode){nextId}] = otio::dynamic_retainer_cast<otio::Item>(track);
+            it->second.push_back((TimelineNode){nextId}); // register the synchronous start
+            parentMap[(TimelineNode){nextId}] = (TimelineNode){1}; // register the parent
+            ++nextId;
         }
     }
     
