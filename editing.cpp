@@ -9,7 +9,9 @@
 #include <stdlib.h>
 
 void DeleteSelectedObject() {
-    if (appState.timelinePH.selected_object == appState.timelinePH.provider->_timeline) {
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    otio::Timeline* timeline = op->OtioTimeilne();
+    if (appState.timelinePH.selected_object == timeline) {
         OTIOProvider* op =
             dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
         op->SetTimeline(nullptr);
@@ -62,10 +64,8 @@ void DeleteSelectedObject() {
 void AddMarkerAtPlayhead(otio::Item* item, std::string name, std::string color) {
     auto playhead = appState.timelinePH.playhead;
 
-    OTIOProvider* op =
-        dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-
-    const auto& timeline = op->_timeline;
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    otio::Timeline* timeline = op->OtioTimeilne();
     if (!timeline)
         return;
 
@@ -99,10 +99,8 @@ void AddMarkerAtPlayhead(otio::Item* item, std::string name, std::string color) 
 }
 
 void AddTrack(std::string kind) {
-    OTIOProvider* op =
-        dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-
-    const auto& timeline = op->_timeline;
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    otio::Timeline* timeline = op->OtioTimeilne();
     if (!timeline)
         return;
 
@@ -161,10 +159,8 @@ void AddTrack(std::string kind) {
 }
 
 void FlattenTrackDown() {
-    OTIOProvider* op =
-        dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-
-    const auto& timeline = op->_timeline;
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    otio::Timeline* timeline = op->OtioTimeilne();
     if (!timeline) {
         Message("Cannot flatten: No timeline.");
         return;

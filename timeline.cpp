@@ -1328,8 +1328,9 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
         ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
         ImGui::TableNextColumn();
-
-        DrawObjectLabel(tp, op->_timeline, tp->track_height);
+        OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+        otio::Timeline* timeline = op->OtioTimeilne();
+        DrawObjectLabel(tp, timeline, tp->track_height);
 
         ImGui::TableNextColumn();
 

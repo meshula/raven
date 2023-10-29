@@ -271,7 +271,7 @@ void LoadFile(std::string path) {
 
 void SaveFile(std::string path) {
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    auto timeline = op->_timeline;
+    otio::Timeline* timeline = op->OtioTimeilne();
     if (!timeline)
         return;
 
@@ -616,10 +616,10 @@ void DrawMenu() {
             if (ImGui::MenuItem("Revert")) {
                 LoadFile(appState.file_path);
             }
-            OTIOProvider* op =
-                dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+            OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+            otio::Timeline* timeline = op->OtioTimeilne();
             if (ImGui::MenuItem("Close", NULL, false,
-                                op->_timeline)) {
+                                timeline)) {
                 op->SetTimeline(nullptr);
                 SelectObject(NULL);
             }
@@ -820,16 +820,13 @@ void SnapPlayhead() {
 }
 
 void DetectPlayheadLimits() {
-    const auto timeline = appState.timelinePH.provider->_timeline;
-    appState.timelinePH.playhead_limit = otio::TimeRange(
-        timeline->global_start_time().value_or(otio::RationalTime()),
-        timeline->duration());
+    appState.timelinePH.playhead_limit = appState.timelinePH.provider->TimelineTimeRange();
 }
 
 void FitZoomWholeTimeline() {
-    const auto timeline = appState.timelinePH.provider->_timeline;
+    otio::TimeRange r = appState.timelinePH.provider->TimelineTimeRange();
     appState.timelinePH.scale =
-        appState.timelinePH.timeline_width / timeline->duration().to_seconds();
+        appState.timelinePH.timeline_width / r.duration().to_seconds();
 }
 
 std::string FormattedStringFromTime(otio::RationalTime time, bool allow_rate) {

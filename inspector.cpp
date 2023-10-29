@@ -622,18 +622,16 @@ void DrawMarkersInspector(TimelineProviderHarness* tp) {
 
     typedef std::pair<otio::SerializableObject::Retainer<otio::Marker>, otio::SerializableObject::Retainer<otio::Item>> marker_parent_pair;
     std::vector<marker_parent_pair> pairs;
-
-    OTIOProvider* op =
-        dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-
-    auto root = op->_timeline->tracks();
-    auto global_start = op->_timeline->global_start_time().value_or(otio::RationalTime());
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    otio::Timeline* timeline = op->OtioTimeilne();
+    auto root = timeline->tracks();
+    auto global_start = timeline->global_start_time().value_or(otio::RationalTime());
 
     for (const auto& marker : root->markers()) {
         pairs.push_back(marker_parent_pair(marker, root));
     }
 
-    for (const auto& child : op->_timeline->tracks()->find_children())
+    for (const auto& child : timeline->tracks()->find_children())
     {
         if (const auto& item = dynamic_cast<otio::Item*>(&*child))
         {
