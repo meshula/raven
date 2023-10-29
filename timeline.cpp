@@ -40,11 +40,14 @@ void TopLevelTimeRangeMap(
     auto zero = otio::RationalTime();
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(provider);
     TimelineNode tracksNode = op->RootNode();
-    auto top = op->OtioItemFromNode(tracksNode);
-    auto offset = context->transformed_time(zero, top);
-    for (auto& pair : range_map) {
-        auto& range = pair.second;
-        range = otio::TimeRange(range.start_time() + offset, range.duration());
+    auto topItem = op->OtioItemFromNode(tracksNode);
+    auto top = dynamic_cast<otio::Item*>(topItem.value);
+    if (top) {
+        auto offset = context->transformed_time(zero, top);
+        for (auto& pair : range_map) {
+            auto& range = pair.second;
+            range = otio::TimeRange(range.start_time() + offset, range.duration());
+        }
     }
 }
 
@@ -619,8 +622,11 @@ void DrawObjectLabel(TimelineProviderHarness* tp,
 }
 
 void DrawTrackLabel(TimelineProviderHarness* tp,
-                    otio::Track* track, int index, float height) {
+                    TimelineNode trackNode, int index, float height) {
     float width = ImGui::GetContentRegionAvail().x;
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    auto trackItem = op->OtioItemFromNode(trackNode);
+    otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
 
     ImGui::BeginGroup();
     ImGui::AlignTextToFramePadding();
@@ -719,19 +725,24 @@ void DrawTrack(
     auto children = op->SeqStarts(trackNode);
 
     for (const auto& child : children) {
-        auto item = op->OtioItemFromNode(child).value;
-        DrawItem(tp, item, scale, origin, height, range_map);
+        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioItemFromNode(child).value;
+        auto item = dynamic_cast<otio::Item*>(comp.value);
+        if (item)
+            DrawItem(tp, item, scale, origin, height, range_map);
     }
     for (const auto& child : children) {
         auto item = op->OtioItemFromNode(child).value;
         if (const auto& transition = dynamic_cast<otio::Transition*>(item)) {
-            DrawItem(tp, item, scale, origin, height, range_map);
+            DrawTransition(tp, transition, scale, origin, height, range_map);
         }
     }
     for (const auto& child : children) {
-        auto item = op->OtioItemFromNode(child).value;
-        DrawEffects(tp, item, scale, origin, height, range_map);
-        DrawMarkers(tp, item, scale, origin, height, range_map);
+        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioItemFromNode(child).value;
+        auto item = dynamic_cast<otio::Item*>(comp.value);
+        if (item) {
+            DrawEffects(tp, item, scale, origin, height, range_map);
+            DrawMarkers(tp, item, scale, origin, height, range_map);
+        }
     }
 
     ImGui::EndGroup();
@@ -1354,7 +1365,8 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
         std::map<otio::Composable*, otio::TimeRange> empty_map;
         auto topNode = op->RootNode();
-        auto top = op->OtioItemFromNode(topNode).value;
+        auto topComp = op->OtioItemFromNode(topNode).value;
+        otio::Item* top = dynamic_cast<otio::Item*>(topComp);
         DrawMarkers(
             tp,
             top,
@@ -1389,10 +1401,8 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         int index = (int)video_tracks.size();
         for (auto video_track = video_tracks.rbegin(); video_track != video_tracks.rend(); ++video_track) {
             ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
-            auto vtItem = op->OtioItemFromNode(*video_track);
-            auto vt = otio::dynamic_retainer_cast<otio::Track>(vtItem);
             if (ImGui::TableNextColumn()) {
-                DrawTrackLabel(tp, vt, index, tp->track_height);
+                DrawTrackLabel(tp, *video_track, index, tp->track_height);
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
@@ -1419,11 +1429,10 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         index = 1;
         for (auto trackNode : tracks) {
             auto item = op->OtioItemFromNode(trackNode);
-            otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(item);
-            if (track->kind() == otio::Track::Kind::audio) {
+            if (op->NodeSecondaryKindName(trackNode) == otio::Track::Kind::audio) {
                 ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
                 if (ImGui::TableNextColumn()) {
-                    DrawTrackLabel(tp, track, index, tp->track_height);
+                    DrawTrackLabel(tp, trackNode, index, tp->track_height);
                 }
                 if (ImGui::TableNextColumn()) {
                     DrawTrack(
