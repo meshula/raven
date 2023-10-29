@@ -1375,25 +1375,25 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         origin.y += tp->track_height;
 
         // filter the video tracks
-        std::vector<otio::SerializableObject::Retainer<otio::Track> > video_tracks;
+        std::vector<TimelineNode> video_tracks;
         for (auto trackNode : tracks) {
-            auto item = op->OtioItemFromNode(trackNode);
-            otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(item);
-            if (track->kind() == otio::Track::Kind::video) {
-                video_tracks.push_back(track);
+            if (op->NodeSecondaryKindName(trackNode) == otio::Track::Kind::video) {
+                video_tracks.push_back(trackNode);
             }
         }
 
         int index = (int)video_tracks.size();
         for (auto video_track = video_tracks.rbegin(); video_track != video_tracks.rend(); ++video_track) {
             ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
+            auto vtItem = op->OtioItemFromNode(*video_track);
+            auto vt = otio::dynamic_retainer_cast<otio::Track>(vtItem);
             if (ImGui::TableNextColumn()) {
-                DrawTrackLabel(tp, *video_track, index, tp->track_height);
+                DrawTrackLabel(tp, vt, index, tp->track_height);
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
                     tp,
-                    *video_track,
+                    vt,
                     tp->scale,
                     origin,
                     full_width,

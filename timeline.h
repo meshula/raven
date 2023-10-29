@@ -40,7 +40,8 @@ public:
     TimelineNode HasParent(TimelineNode) const;
     
     virtual std::vector<std::string> NodeKindNames() const = 0;
-    virtual const std::string& NodeKindName(TimelineNode) const = 0;
+    virtual const std::string NodeKindName(TimelineNode) const = 0;
+    virtual const std::string NodeSecondaryKindName(TimelineNode) const = 0;
     virtual otio::TimeRange TimeRange(TimelineNode) const = 0;
     virtual otio::RationalTime StartTime(TimelineNode) const = 0;
     virtual otio::RationalTime Duration(TimelineNode) const = 0;
@@ -105,9 +106,19 @@ public:
     std::vector<std::string> NodeKindNames() const override {
         return {};
     }
-    const std::string& NodeKindName(TimelineNode) const override {
+    const std::string NodeKindName(TimelineNode) const override {
         return nullName;
     }
+    const std::string NodeSecondaryKindName(TimelineNode n) const override {
+        auto it = nodeMap.find(n);
+        if (it == nodeMap.end())
+            return nullName;
+        auto track = otio::dynamic_retainer_cast<otio::Track>(it->second);
+        if (track.value == nullptr)
+            return nullName;
+        return track->kind();
+    }
+    
     otio::TimeRange TimeRange(TimelineNode) const override {
         return otio::TimeRange();
     }
