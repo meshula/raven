@@ -24,14 +24,18 @@ inline bool operator== (const TimelineNode& a, const TimelineNode& b) {
 }
 
 constexpr inline TimelineNode TimelineNodeNull() { return { 0 }; }
-constexpr inline TimelineNode DocumentNodeId() { return (TimelineNode){1}; }
-constexpr inline TimelineNode RootNodeId() { return (TimelineNode){2}; }
+constexpr inline TimelineNode RootNodeId() { return (TimelineNode){1}; }
 
 class TimelineProvider {
 protected:
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _syncStarts;
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _seqStarts;
-    void clearMaps() { _syncStarts.clear(); }
+    std::map<TimelineNode, otio::TimeRange, cmp_TimelineNode> _times;
+    void clearMaps() {
+        _syncStarts.clear();
+        _seqStarts.clear();
+        _times.clear();
+    }
 
 public:
     virtual ~TimelineProvider() = default;
@@ -43,10 +47,6 @@ public:
     virtual std::vector<std::string> NodeKindNames() const = 0;
     virtual const std::string NodeKindName(TimelineNode) const = 0;
     virtual const std::string NodeSecondaryKindName(TimelineNode) const = 0;
-    virtual otio::TimeRange TimeRange(TimelineNode) const = 0;
-    virtual otio::RationalTime StartTime(TimelineNode) const = 0;
-    virtual otio::RationalTime Duration(TimelineNode) const = 0;
-    virtual TimelineNode Document() const = 0;
     virtual TimelineNode RootNode() const = 0;
     virtual otio::TimeRange TimelineTimeRange() const = 0;
     
@@ -62,6 +62,25 @@ public:
             return {};
         return it->second;  // returns a copy
     }
+    
+    otio::TimeRange TimeRange(TimelineNode n) const {
+        auto it = _times.find(n);
+        if (it == _times.end())
+            return otio::TimeRange();
+        return it->second;
+    }
+    otio::RationalTime StartTime(TimelineNode n) const {
+        auto it = _times.find(n);
+        if (it == _times.end())
+            return otio::RationalTime();
+        return it->second.start_time();
+    }
+    otio::RationalTime Duration(TimelineNode n) const {
+        auto it = _times.find(n);
+        if (it == _times.end())
+            return otio::RationalTime();
+        return it->second.duration();
+    }
 };
 
 class OTIOProvider : public TimelineProvider {
@@ -72,9 +91,30 @@ class OTIOProvider : public TimelineProvider {
     std::map<TimelineNode, 
              TimelineNode,
              cmp_TimelineNode> parentMap;
+    std::map<otio::Composable*, TimelineNode> _reverse;
     uint64_t nextId = 0;
     std::string nullName;
     
+    // Transform this range map from the context item's coodinate space
+    // into the top-level timeline's coordinate space. This compensates for
+    // any source_range offsets in intermediate levels of nesting in the
+    // composition.
+    void TransformToContextCoordinateSpace(
+            std::map<otio::Composable*, otio::TimeRange>& range_map,
+            otio::Item* context) {
+        auto zero = otio::RationalTime();
+        TimelineNode tracksNode = RootNode();
+        auto topItem = OtioFromNode(tracksNode);
+        auto top = dynamic_cast<otio::Item*>(topItem.value);
+        if (top) {
+            auto offset = context->transformed_time(zero, top);
+            for (auto& pair : range_map) {
+                auto& range = pair.second;
+                range = otio::TimeRange(range.start_time() + offset, range.duration());
+            }
+        }
+    }
+
 public:
     OTIOProvider() {
         nullName = "<null>";
@@ -95,13 +135,11 @@ public:
             return;
         
         // add the root
-        nodeMap[DocumentNodeId()] = otio::dynamic_retainer_cast<otio::Composable>(t);
-        _syncStarts[DocumentNodeId()] = std::vector<TimelineNode>();
-
-        // encode the tracks of the timeline's stack as sync starts on the root.
         otio::Stack* stack = t->tracks();
         nodeMap[RootNodeId()] = otio::dynamic_retainer_cast<otio::Composable>(t);
         _syncStarts[RootNodeId()] = std::vector<TimelineNode>();
+
+        // encode the tracks of the timeline's stack as sync starts on the root.
         auto start_it = _syncStarts.find(RootNodeId());
         nextId = 3;
         std::vector<otio::SerializableObject::Retainer<otio::Composable>> const& tracks = stack->children();
@@ -109,19 +147,31 @@ public:
             otio::SerializableObject::Retainer<otio::Composable> track = otio::dynamic_retainer_cast<otio::Composable>(trackItem); // Composable to Item
             nodeMap[(TimelineNode){nextId}] = track;
             auto trackNode = (TimelineNode){nextId};
+            _reverse[trackItem.value] = trackNode;
             start_it->second.push_back(trackNode); // register the synchronous start
             _seqStarts[trackNode] = std::vector<TimelineNode>();
             auto seq_it = _seqStarts.find(trackNode);
-            parentMap[(TimelineNode){nextId}] = DocumentNodeId(); // register the parent
             ++nextId;
             
             otio::SerializableObject::Retainer<otio::Track> otrack = otio::dynamic_retainer_cast<otio::Track>(trackItem); // Composable to Item
             for (const auto& child : otrack->children()) {
                 if (const auto& item = dynamic_cast<otio::Composable*>(child.value)) {
-                    parentMap[(TimelineNode){nextId}] = trackNode;
-                    nodeMap[(TimelineNode){nextId}] = item;
-                    seq_it->second.push_back((TimelineNode){nextId}); // register the sequential starts
+                    TimelineNode itemNode = (TimelineNode){nextId};
+                    parentMap[itemNode] = trackNode;
+                    nodeMap[itemNode] = item;
+                    _reverse[item] = itemNode;
+                    seq_it->second.push_back(itemNode); // register the sequential starts
                     ++nextId;
+                }
+            }
+            
+            // compute and cache the times for all the children
+            auto times = otrack->range_of_all_children();
+            TransformToContextCoordinateSpace(times, otrack);
+            for (auto time : times) {
+                auto it = _reverse.find(time.first);
+                if (it != _reverse.end()) {
+                    _times[it->second] = time.second;
                 }
             }
         }
@@ -143,34 +193,6 @@ public:
         return track->kind();
     }
     
-    otio::TimeRange TimeRange(TimelineNode) const override {
-        return otio::TimeRange();
-    }
-    otio::RationalTime StartTime(TimelineNode n) const override {
-        auto it = nodeMap.find(n);
-        if (it == nodeMap.end()) {
-            return otio::RationalTime();
-        }
-        auto item = dynamic_cast<otio::Item*>(it->second.value);
-        if (!item) {
-            return otio::RationalTime();
-        }
-        return item->trimmed_range().start_time();
-    }
-    otio::RationalTime Duration(TimelineNode n) const override {
-        auto it = nodeMap.find(n);
-        if (it == nodeMap.end()) {
-            return otio::RationalTime();
-        }
-        return it->second->duration();
-    }
-    TimelineNode Document() const override {
-        auto it = nodeMap.find(DocumentNodeId());
-        if (it == nodeMap.end()) {
-            return TimelineNodeNull();
-        }
-        return it->first;
-    }
     TimelineNode RootNode() const override {
         auto it = nodeMap.find(RootNodeId());
         if (it == nodeMap.end()) {
@@ -183,10 +205,18 @@ public:
         return _timeline;
     }
 
-    otio::SerializableObject::Retainer<otio::Composable> OtioItemFromNode(TimelineNode n) {
+    otio::SerializableObject::Retainer<otio::Composable> OtioFromNode(TimelineNode n) {
         auto it = nodeMap.find(n);
         if (it == nodeMap.end()) {
             return {};
+        }
+        return it->second;
+    }
+    
+    TimelineNode NodeFromOtio(otio::Composable* i) {
+        auto it = _reverse.find(i);
+        if (it == _reverse.end()) {
+            return TimelineNodeNull();
         }
         return it->second;
     }

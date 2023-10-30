@@ -29,35 +29,18 @@ TimeScalarForItem(otio::Item* item) {
     return time_scalar;
 }
 
-// Transform this range map from the context item's coodinate space
-// into the top-level timeline's coordinate space. This compensates for
-// any source_range offsets in intermediate levels of nesting in the
-// composition.
-void TopLevelTimeRangeMap(
-        TimelineProvider* provider,
-        std::map<otio::Composable*, otio::TimeRange>& range_map,
-        otio::Item* context) {
-    auto zero = otio::RationalTime();
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(provider);
-    TimelineNode tracksNode = op->RootNode();
-    auto topItem = op->OtioItemFromNode(tracksNode);
-    auto top = dynamic_cast<otio::Item*>(topItem.value);
-    if (top) {
-        auto offset = context->transformed_time(zero, top);
-        for (auto& pair : range_map) {
-            auto& range = pair.second;
-            range = otio::TimeRange(range.start_time() + offset, range.duration());
-        }
-    }
-}
-
 void DrawItem(
         TimelineProviderHarness* tp,
         otio::Item* item,
         float scale,
         ImVec2 origin,
-        float height,
-        std::map<otio::Composable*, otio::TimeRange>& range_map) {
+        float height) 
+{
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    TimelineNode itemNode = op->NodeFromOtio(item);
+    if (itemNode == TimelineNodeNull())
+        return;
+
     auto duration = item->duration();
     auto trimmed_range = item->trimmed_range();
     float width = duration.to_seconds() * scale;
@@ -70,15 +53,15 @@ void DrawItem(
     // is there enough horizontal space for labels at all?
     bool show_label = width > text_offset.x * 2;
     // is there enough vertical *and* horizontal space for time ranges?
-    bool show_time_range = (height > font_height * 2 + text_offset.y * 2)
-        && (width > font_width * 15);
+    bool show_time_range = (height > font_height * 2 + text_offset.y * 2) &&
+                           (width > font_width * 15);
 
-    auto range_it = range_map.find(item);
-    if (range_it == range_map.end()) {
-        Log("Couldn't find %s in range map?!", item->name().c_str());
+    auto item_range = op->TimeRange(itemNode);
+    if (item_range == otio::TimeRange()) {
+        Log("Couldn't find %s in range map", item->name().c_str());
         assert(false);
+        return;
     }
-    auto item_range = range_it->second;
 
     ImVec2 size(width, height);
     ImVec2 render_pos(
@@ -248,17 +231,21 @@ void DrawTransition(
     otio::Transition* transition,
     float scale,
     ImVec2 origin,
-    float height,
-    std::map<otio::Composable*, otio::TimeRange>& range_map) {
+    float height)
+{
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    TimelineNode transitionNode = op->NodeFromOtio(transition);
+    if (transitionNode == TimelineNodeNull())
+        return;
+    
     auto duration = transition->duration();
     float width = duration.to_seconds() * scale;
 
-    auto range_it = range_map.find(transition);
-    if (range_it == range_map.end()) {
+    auto item_range = op->TimeRange(transitionNode);
+    if (item_range == otio::TimeRange()) {
         Log("Couldn't find %s in range map?!", transition->name().c_str());
         assert(false);
     }
-    auto item_range = range_it->second;
 
     ImVec2 size(width, height);
     ImVec2 render_pos(
@@ -334,11 +321,23 @@ void DrawEffects(
     otio::Item* item,
     float scale,
     ImVec2 origin,
-    float row_height,
-    std::map<otio::Composable*, otio::TimeRange>& range_map) {
+    float row_height)
+{
     auto effects = item->effects();
     if (effects.size() == 0)
         return;
+    
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    TimelineNode itemNode = op->NodeFromOtio(item);
+    if (itemNode == TimelineNodeNull())
+        return;
+
+    auto item_range = op->TimeRange(itemNode);
+    if (item_range == otio::TimeRange()) {
+        Log("Couldn't find %s in range map?!", item->name().c_str());
+        assert(false);
+        return;
+    }
 
     std::string label_str;
     for (const auto& effect : effects) {
@@ -354,13 +353,6 @@ void DrawEffects(
     float item_width = item_duration.to_seconds() * scale;
     float width = fminf(item_width, text_size.x + text_offset.x * 2);
     float height = fminf(row_height - 2, text_size.y + text_offset.y * 2);
-
-    auto range_it = range_map.find(item);
-    if (range_it == range_map.end()) {
-        Log("Couldn't find %s in range map?!", item->name().c_str());
-        assert(false);
-    }
-    auto item_range = range_it->second;
 
     ImVec2 size(width, height*0.75);
 
@@ -462,9 +454,10 @@ void DrawMarkers(
         float scale,
         ImVec2 origin,
         float height,
-        std::map<otio::Composable*, otio::TimeRange>& range_map) {
+        bool offsetInParent)
+{
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    auto itemComp = op->OtioItemFromNode(itemNode).value;
+    auto itemComp = op->OtioFromNode(itemNode).value;
     otio::Item* item = dynamic_cast<otio::Item*>(itemComp);
     if (item == nullptr)
         return;
@@ -475,13 +468,8 @@ void DrawMarkers(
 
     auto item_trimmed_start = item->trimmed_range().start_time();
     auto item_start_in_parent = otio::RationalTime();
-    if (item->parent() != NULL) {
-        auto range_it = range_map.find(item);
-        if (range_it == range_map.end()) {
-            Log("Couldn't find %s in range map?!", item->name().c_str());
-            assert(false);
-        }
-        auto item_range = range_it->second;
+    if (offsetInParent && item->parent() != NULL) {
+        otio::TimeRange item_range = op->TimeRange(itemNode);
         item_start_in_parent = item_range.start_time();
     }
 
@@ -519,7 +507,6 @@ void DrawMarkers(
             ImGui::PopID();
             ImGui::SetCursorPos(old_pos);
             continue;
-            ;
         }
         // ImGui::SetItemAllowOverlap();
 
@@ -629,7 +616,7 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
                     TimelineNode trackNode, int index, float height) {
     float width = ImGui::GetContentRegionAvail().x;
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    auto trackItem = op->OtioItemFromNode(trackNode);
+    auto trackItem = op->OtioFromNode(trackNode);
     otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
 
     ImGui::BeginGroup();
@@ -711,41 +698,31 @@ void DrawTrack(
         float height) {
     ImGui::BeginGroup();
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    auto trackItem = op->OtioItemFromNode(trackNode);
+    auto trackItem = op->OtioFromNode(trackNode);
     otio::Track* track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
     if (!track)
         return;
 
-    otio::ErrorStatus error_status;
-    auto range_map = track->range_of_all_children(&error_status);
-    if (otio::is_error(error_status)) {
-        Message(
-            "Error calculating timing: %s",
-            otio_error_string(error_status).c_str());
-        assert(false);
-    }
-
-    TopLevelTimeRangeMap(tp->provider.get(), range_map, track);
     auto children = op->SeqStarts(trackNode);
 
     for (const auto& child : children) {
-        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioItemFromNode(child).value;
+        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(child).value;
         auto item = dynamic_cast<otio::Item*>(comp.value);
         if (item)
-            DrawItem(tp, item, scale, origin, height, range_map);
+            DrawItem(tp, item, scale, origin, height);
     }
     for (const auto& child : children) {
-        auto item = op->OtioItemFromNode(child).value;
+        auto item = op->OtioFromNode(child).value;
         if (const auto& transition = dynamic_cast<otio::Transition*>(item)) {
-            DrawTransition(tp, transition, scale, origin, height, range_map);
+            DrawTransition(tp, transition, scale, origin, height);
         }
     }
     for (const auto& child : children) {
-        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioItemFromNode(child).value;
+        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(child).value;
         auto item = dynamic_cast<otio::Item*>(comp.value);
         if (item) {
-            DrawEffects(tp, item, scale, origin, height, range_map);
-            DrawMarkers(tp, child, scale, origin, height, range_map);
+            DrawEffects(tp, item, scale, origin, height);
+            DrawMarkers(tp, child, scale, origin, height, true);
         }
     }
 
@@ -1367,14 +1344,13 @@ void DrawTimeline(TimelineProviderHarness* tp) {
             // scroll_to_playhead = true;
         }
 
-        std::map<otio::Composable*, otio::TimeRange> empty_map;
         DrawMarkers(
             tp,
             op->RootNode(),
             tp->scale,
             origin,
             tp->track_height,
-            empty_map);
+            false);
 
         // draw just the top of the playhead in the fixed timecode track
         float playhead_x = DrawPlayhead(
@@ -1429,7 +1405,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
 
         index = 1;
         for (auto trackNode : tracks) {
-            auto item = op->OtioItemFromNode(trackNode);
+            auto item = op->OtioFromNode(trackNode);
             if (op->NodeSecondaryKindName(trackNode) == otio::Track::Kind::audio) {
                 ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
                 if (ImGui::TableNextColumn()) {
