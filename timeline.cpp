@@ -31,14 +31,15 @@ TimeScalarForItem(otio::Item* item) {
 
 void DrawItem(
         TimelineProviderHarness* tp,
-        otio::Item* item,
+        TimelineNode itemNode,
         float scale,
         ImVec2 origin,
         float height) 
 {
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    TimelineNode itemNode = op->NodeFromOtio(item);
-    if (itemNode == TimelineNodeNull())
+    otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(itemNode).value;
+    auto item = dynamic_cast<otio::Item*>(comp.value);
+    if (!item)
         return;
 
     auto duration = item->duration();
@@ -228,14 +229,15 @@ void DrawItem(
 
 void DrawTransition(
     TimelineProviderHarness* tp,
-    otio::Transition* transition,
+    TimelineNode transitionNode,
     float scale,
     ImVec2 origin,
     float height)
 {
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    TimelineNode transitionNode = op->NodeFromOtio(transition);
-    if (transitionNode == TimelineNodeNull())
+    auto item = op->OtioFromNode(transitionNode).value;
+    auto transition = dynamic_cast<otio::Transition*>(item);
+    if (!transition)
         return;
     
     auto duration = transition->duration();
@@ -318,20 +320,21 @@ void DrawTransition(
 
 void DrawEffects(
     TimelineProviderHarness* tp,
-    otio::Item* item,
+    TimelineNode itemNode,
     float scale,
     ImVec2 origin,
     float row_height)
 {
+    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    auto itemPtr = op->OtioFromNode(itemNode).value;
+    auto item = dynamic_cast<otio::Item*>(itemPtr);
+    if (!item)
+        return;
+
     auto effects = item->effects();
     if (effects.size() == 0)
         return;
     
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    TimelineNode itemNode = op->NodeFromOtio(item);
-    if (itemNode == TimelineNodeNull())
-        return;
-
     auto item_range = op->TimeRange(itemNode);
     if (item_range == otio::TimeRange()) {
         Log("Couldn't find %s in range map?!", item->name().c_str());
@@ -706,22 +709,16 @@ void DrawTrack(
     auto children = op->SeqStarts(trackNode);
 
     for (const auto& child : children) {
-        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(child).value;
-        auto item = dynamic_cast<otio::Item*>(comp.value);
-        if (item)
-            DrawItem(tp, item, scale, origin, height);
+        DrawItem(tp, child, scale, origin, height);
     }
     for (const auto& child : children) {
-        auto item = op->OtioFromNode(child).value;
-        if (const auto& transition = dynamic_cast<otio::Transition*>(item)) {
-            DrawTransition(tp, transition, scale, origin, height);
-        }
+        DrawTransition(tp, child, scale, origin, height);
     }
     for (const auto& child : children) {
         otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(child).value;
         auto item = dynamic_cast<otio::Item*>(comp.value);
         if (item) {
-            DrawEffects(tp, item, scale, origin, height);
+            DrawEffects(tp, child, scale, origin, height);
             DrawMarkers(tp, child, scale, origin, height, true);
         }
     }
