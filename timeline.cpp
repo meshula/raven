@@ -698,15 +698,11 @@ void DrawTrack(
         float scale,
         ImVec2 origin,
         float full_width,
-        float height) {
-    ImGui::BeginGroup();
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    auto trackItem = op->OtioFromNode(trackNode);
-    otio::Track* track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
-    if (!track)
-        return;
+        float height) 
+{
+    auto children = tp->provider->SeqStarts(trackNode);
 
-    auto children = op->SeqStarts(trackNode);
+    ImGui::BeginGroup();
 
     for (const auto& child : children) {
         DrawItem(tp, child, scale, origin, height);
@@ -715,12 +711,8 @@ void DrawTrack(
         DrawTransition(tp, child, scale, origin, height);
     }
     for (const auto& child : children) {
-        otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(child).value;
-        auto item = dynamic_cast<otio::Item*>(comp.value);
-        if (item) {
-            DrawEffects(tp, child, scale, origin, height);
-            DrawMarkers(tp, child, scale, origin, height, true);
-        }
+        DrawEffects(tp, child, scale, origin, height);
+        DrawMarkers(tp, child, scale, origin, height, true);
     }
 
     ImGui::EndGroup();
@@ -737,7 +729,8 @@ void DrawTimecodeRuler(
         float time_scalar,
         float zoom_scale,
         float width,
-        float height) {
+        float height) 
+{
     double scale = zoom_scale / time_scalar;
 
     ImVec2 size(width, height);
@@ -1269,16 +1262,12 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     }
 
     auto playhead = tp->playhead;
-
+    auto playhead_string = FormattedStringFromTime(playhead);
     auto start = tp->playhead_limit.start_time();
     auto duration = tp->playhead_limit.duration();
     auto end = tp->playhead_limit.end_time_exclusive();
-
-    auto playhead_string = FormattedStringFromTime(playhead);
-
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-    auto root = op->RootNode();
-    auto tracks = op->SyncStarts(root);
+    auto root = tp->provider->RootNode();
+    auto tracks = tp->provider->SyncStarts(root);
     
     // Tracks
 
