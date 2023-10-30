@@ -259,8 +259,7 @@ void DrawTimecodeRuler(
     otio::RationalTime start,
     otio::RationalTime end,
     float frame_rate,
-    float time_scalar,
-    float scale,
+    float time_scale,
     float width,
     float height);
 

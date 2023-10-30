@@ -172,14 +172,6 @@ void DrawItem(
         }
     }
     if (show_time_range) {
-        // auto str1 = std::to_string(trimmed_range.start_time().to_frames());
-        // auto str2 =
-        // std::to_string(trimmed_range.end_time_inclusive().to_frames()); auto pos1
-        // = ImVec2(p0.x + text_offset.x, p1.y - text_offset.y - font_height); auto
-        // pos2 = ImVec2(p1.x - text_offset.x - ImGui::CalcTextSize(str2.c_str()).x,
-        // p1.y - text_offset.y - font_height); draw_list->AddText(pos1,
-        // label_color, str1.c_str()); draw_list->AddText(pos2, label_color,
-        // str2.c_str());
         auto time_scalar = TimeScalarForItem(item);
         auto trimmed_range = item->trimmed_range();
         auto start = trimmed_range.start_time();
@@ -197,8 +189,7 @@ void DrawItem(
             start,
             end,
             rate,
-            time_scalar,
-            scale,
+            scale / time_scalar,
             width,
             height - ruler_y_offset);
     }
@@ -570,7 +561,7 @@ void DrawObjectLabel(TimelineProviderHarness* tp,
     ImGui::AlignTextToFramePadding();
     ImVec2 size(width, height);
     ImGui::InvisibleButton("##empty", size);
-
+//^^^ this routine needs name and schema_name to be provided
     char label_str[200];
     snprintf(
         label_str,
@@ -621,7 +612,7 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
     auto trackItem = op->OtioFromNode(trackNode);
     otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
-
+//^^^ add Name(TimelineNode) and then this routine is provided.
     ImGui::BeginGroup();
     ImGui::AlignTextToFramePadding();
     ImVec2 size(width, height);
@@ -726,13 +717,10 @@ void DrawTimecodeRuler(
         otio::RationalTime start,
         otio::RationalTime end,
         float frame_rate,
-        float time_scalar,
-        float zoom_scale,
+        float scale,
         float width,
         float height) 
 {
-    double scale = zoom_scale / time_scalar;
-
     ImVec2 size(width, height);
     ImVec2 text_offset(7.0f, 5.0f);
 
@@ -894,7 +882,6 @@ bool DrawTimecodeTrack(
         start,
         end,
         frame_rate,
-        1.0,
         scale,
         size.x,
         size.y);
