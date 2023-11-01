@@ -56,10 +56,12 @@ void DrawItem(
     // is there enough vertical *and* horizontal space for time ranges?
     bool show_time_range = (height > font_height * 2 + text_offset.y * 2) &&
                            (width > font_width * 15);
-
+    
+    const std::string emptyStr;
+    const std::string& label_str = dynamic_cast<otio::Gap*>(item) != nullptr ? emptyStr : item->name();
     auto item_range = op->TimeRange(itemNode);
     if (item_range == otio::TimeRange()) {
-        Log("Couldn't find %s in range map", item->name().c_str());
+        Log("Couldn't find %s in range map", label_str.c_str());
         assert(false);
         return;
     }
@@ -69,7 +71,6 @@ void DrawItem(
         item_range.start_time().to_seconds() * scale + origin.x,
         ImGui::GetCursorPosY());
 
-    std::string label_str = item->name();
     auto label_color = appTheme.colors[AppThemeCol_Label];
     auto fill_color = appTheme.colors[AppThemeCol_Item];
     auto selected_fill_color = appTheme.colors[AppThemeCol_ItemSelected];
@@ -82,12 +83,11 @@ void DrawItem(
         fill_color = TintedColorForUI(fill_color);
     }
 
-    if (auto gap = dynamic_cast<otio::Gap*>(item)) {
+    if (label_str.size() == 0) {
         // different colors & style
         fill_color = appTheme.colors[AppThemeCol_Background];
         selected_fill_color = appTheme.colors[AppThemeCol_GapSelected];
         hover_fill_color = appTheme.colors[AppThemeCol_GapHovered];
-        label_str = "";
         fancy_corners = false;
         show_time_range = false;
     }
@@ -202,7 +202,7 @@ void DrawItem(
         ImGui::SetTooltip(
             "%s: %s\nRange: %s - %s\nDuration: %s%s",
             item->schema_name().c_str(),
-            item->name().c_str(),
+            label_str.c_str(),
             FormattedStringFromTime(trimmed_range.start_time()).c_str(),
             FormattedStringFromTime(trimmed_range.end_time_inclusive()).c_str(),
             FormattedStringFromTime(duration).c_str(),
@@ -234,9 +234,10 @@ void DrawTransition(
     auto duration = transition->duration();
     float width = duration.to_seconds() * scale;
 
+    const std::string& transition_name = op->Name(transitionNode);
     auto item_range = op->TimeRange(transitionNode);
     if (item_range == otio::TimeRange()) {
-        Log("Couldn't find %s in range map?!", transition->name().c_str());
+        Log("Couldn't find %s in range map?!", transition_name.c_str());
         assert(false);
     }
 
@@ -296,7 +297,7 @@ void DrawTransition(
         ImGui::SetTooltip(
             "%s: %s\nIn/Out Offset: %s / %s\nDuration: %s",
             transition->schema_name().c_str(),
-            transition->name().c_str(),
+            transition_name.c_str(),
             FormattedStringFromTime(transition->in_offset()).c_str(),
             FormattedStringFromTime(transition->out_offset()).c_str(),
             FormattedStringFromTime(duration).c_str());
@@ -326,9 +327,11 @@ void DrawEffects(
     if (effects.size() == 0)
         return;
     
+    const std::string& effect_name = op->Name(itemNode);
+    
     auto item_range = op->TimeRange(itemNode);
     if (item_range == otio::TimeRange()) {
-        Log("Couldn't find %s in range map?!", item->name().c_str());
+        Log("Couldn't find %s in range map?!", effect_name.c_str());
         assert(false);
         return;
     }
@@ -337,8 +340,8 @@ void DrawEffects(
     for (const auto& effect : effects) {
         if (label_str != "")
             label_str += ", ";
-        label_str += effect->name() != "" ? effect->name()
-                                          : effect->effect_name();
+        label_str += effect_name != "" ? effect->name()
+                                       : effect->effect_name();
     }
     const auto text_size = ImGui::CalcTextSize(label_str.c_str());
     ImVec2 text_offset(5.0f, 5.0f);
@@ -426,7 +429,7 @@ void DrawEffects(
         for (const auto& effect : effects) {
             if (tooltip != "")
                 tooltip += "\n\n";
-            tooltip += effect->schema_name() + ": " + effect->name();
+            tooltip += effect->schema_name() + ": " + effect_name;
             tooltip += "\nEffect Name: " + effect->effect_name();
             if (const auto& timewarp = dynamic_cast<otio::LinearTimeWarp*>(effect.value)) {
                 tooltip += "\nTime Scale: " + std::to_string(timewarp->time_scalar());
@@ -612,12 +615,12 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
     auto trackItem = op->OtioFromNode(trackNode);
     otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
-//^^^ add Name(TimelineNode) and then this routine is provided.
     ImGui::BeginGroup();
     ImGui::AlignTextToFramePadding();
     ImVec2 size(width, height);
     ImGui::InvisibleButton("##empty", size);
 
+    const auto& trackName = op->Name(trackNode);
     char label_str[200];
     snprintf(
         label_str,
@@ -625,7 +628,7 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
         "%c%d: %s",
         track->kind().c_str()[0],
         index,
-        track->name().c_str());
+        trackName.c_str());
 
     auto label_color = appTheme.colors[AppThemeCol_Label];
     auto fill_color = appTheme.colors[AppThemeCol_Track];
@@ -671,7 +674,7 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
         ImGui::SetTooltip(
             "%s: %s\n%s #%d\nRange: %s - %s\nDuration: %s\nChildren: %ld",
             track->schema_name().c_str(),
-            track->name().c_str(),
+            trackName.c_str(),
             track->kind().c_str(),
             index,
             FormattedStringFromTime(trimmed_range.start_time()).c_str(),

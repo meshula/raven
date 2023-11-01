@@ -28,16 +28,22 @@ constexpr inline TimelineNode RootNodeId() { return (TimelineNode){1}; }
 
 class TimelineProvider {
 protected:
+    std::string nullName;
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _syncStarts;
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _seqStarts;
-    std::map<TimelineNode, otio::TimeRange, cmp_TimelineNode> _times;
+    std::map<TimelineNode, otio::TimeRange,           cmp_TimelineNode> _times;
+    std::map<TimelineNode, std::string,               cmp_TimelineNode> _names;
     void clearMaps() {
         _syncStarts.clear();
         _seqStarts.clear();
         _times.clear();
+        _names.clear();
     }
 
 public:
+    TimelineProvider() {
+        nullName = "<null>";
+    }
     virtual ~TimelineProvider() = default;
 
     TimelineNode HasSequentialSibling(TimelineNode) const;
@@ -45,24 +51,29 @@ public:
     TimelineNode HasParent(TimelineNode) const;
     
     virtual std::vector<std::string> NodeKindNames() const = 0;
-    virtual const std::string NodeKindName(TimelineNode) const = 0;
-    virtual const std::string NodeSecondaryKindName(TimelineNode) const = 0;
-    virtual TimelineNode RootNode() const = 0;
-    virtual otio::TimeRange TimelineTimeRange() const = 0;
-    
-    std::vector<TimelineNode> SyncStarts(TimelineNode n) {
+    virtual const std::string        NodeKindName(TimelineNode) const = 0;
+    virtual const std::string        NodeSecondaryKindName(TimelineNode) const = 0;
+    virtual TimelineNode             RootNode() const = 0;
+    virtual otio::TimeRange          TimelineTimeRange() const = 0;
+
+    const std::string& Name(TimelineNode n) const {
+        auto it = _names.find(n);
+        if (it == _names.end())
+            return nullName;
+        return it->second;
+    }
+    std::vector<TimelineNode> SyncStarts(TimelineNode n) const {
         auto it = _syncStarts.find(n);
         if (it == _syncStarts.end())
             return {};
         return it->second;  // returns a copy
     }
-    std::vector<TimelineNode> SeqStarts(TimelineNode n) {
+    std::vector<TimelineNode> SeqStarts(TimelineNode n) const {
         auto it = _seqStarts.find(n);
         if (it == _seqStarts.end())
             return {};
         return it->second;  // returns a copy
     }
-    
     otio::TimeRange TimeRange(TimelineNode n) const {
         auto it = _times.find(n);
         if (it == _times.end())
@@ -93,7 +104,6 @@ class OTIOProvider : public TimelineProvider {
              cmp_TimelineNode> parentMap;
     std::map<otio::Composable*, TimelineNode> _reverse;
     uint64_t nextId = 0;
-    std::string nullName;
     
     // Transform this range map from the context item's coodinate space
     // into the top-level timeline's coordinate space. This compensates for
@@ -116,9 +126,7 @@ class OTIOProvider : public TimelineProvider {
     }
 
 public:
-    OTIOProvider() {
-        nullName = "<null>";
-    }
+    OTIOProvider() = default;
     virtual ~OTIOProvider() = default;
     
     otio::TimeRange TimelineTimeRange() const override {
@@ -150,6 +158,7 @@ public:
             _reverse[trackItem.value] = trackNode;
             start_it->second.push_back(trackNode); // register the synchronous start
             _seqStarts[trackNode] = std::vector<TimelineNode>();
+            _names[trackNode] = track->name();
             auto seq_it = _seqStarts.find(trackNode);
             ++nextId;
             
@@ -160,6 +169,7 @@ public:
                     parentMap[itemNode] = trackNode;
                     nodeMap[itemNode] = item;
                     _reverse[item] = itemNode;
+                    _names[itemNode] = item->name();
                     seq_it->second.push_back(itemNode); // register the sequential starts
                     ++nextId;
                 }
