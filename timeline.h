@@ -33,6 +33,7 @@ protected:
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _seqStarts;
     std::map<TimelineNode, otio::TimeRange,           cmp_TimelineNode> _times;
     std::map<TimelineNode, std::string,               cmp_TimelineNode> _names;
+    std::map<TimelineNode, std::string,               cmp_TimelineNode> _kinds;
     void clearMaps() {
         _syncStarts.clear();
         _seqStarts.clear();
@@ -59,6 +60,12 @@ public:
     const std::string& Name(TimelineNode n) const {
         auto it = _names.find(n);
         if (it == _names.end())
+            return nullName;
+        return it->second;
+    }
+    const std::string& Kind(TimelineNode n) const {
+        auto it = _kinds.find(n);
+        if (it == _kinds.end())
             return nullName;
         return it->second;
     }
@@ -159,6 +166,7 @@ public:
             start_it->second.push_back(trackNode); // register the synchronous start
             _seqStarts[trackNode] = std::vector<TimelineNode>();
             _names[trackNode] = track->name();
+            _kinds[trackNode] = dynamic_cast<otio::Track*>(track.value)->kind();
             auto seq_it = _seqStarts.find(trackNode);
             ++nextId;
             
@@ -246,12 +254,10 @@ public:
     
     otio::RationalTime playhead;
     otio::TimeRange playhead_limit; // min/max limit for moving the playhead, auto-calculated
-    bool drawPanZoomer = true;
+    bool  drawPanZoomer = true;
     float zebra_factor = 0.1;   // opacity of the per-frame zebra stripes
-
-    bool scroll_to_playhead = false; // internal flag, only true until next frame
-
-    bool snap_to_frames = true; // user preference to snap the playhead, times,
+    bool  scroll_to_playhead = false; // internal flag, only true until next frame
+    bool  snap_to_frames = true; // user preference to snap the playhead, times,
                                 // ranges, etc. to frames
     float scale = 100.0f;       // zoom scale, measured in pixels per second
     float track_height = 30.0f; // current track height (pixels)
