@@ -39,11 +39,20 @@ void DrawItem(
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
     otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(itemNode).value;
     auto item = dynamic_cast<otio::Item*>(comp.value);
+    assert(item);
     if (!item)
         return;
 
-    auto duration = item->duration();
-    auto trimmed_range = item->trimmed_range();
+    const std::string emptyStr;
+    const std::string& label_str = dynamic_cast<otio::Gap*>(item) != nullptr ? emptyStr : op->Name(itemNode);
+    auto item_range = op->TimeRange(itemNode);
+    if (item_range == otio::TimeRange()) {
+        Log("Couldn't find %s in range map", label_str.c_str());
+        assert(false);
+        return;
+    }
+
+    auto duration = item_range.duration();
     float width = duration.to_seconds() * scale;
     if (width < 1)
         return;
@@ -57,15 +66,6 @@ void DrawItem(
     bool show_time_range = (height > font_height * 2 + text_offset.y * 2) &&
                            (width > font_width * 15);
     
-    const std::string emptyStr;
-    const std::string& label_str = dynamic_cast<otio::Gap*>(item) != nullptr ? emptyStr : item->name();
-    auto item_range = op->TimeRange(itemNode);
-    if (item_range == otio::TimeRange()) {
-        Log("Couldn't find %s in range map", label_str.c_str());
-        assert(false);
-        return;
-    }
-
     ImVec2 size(width, height);
     ImVec2 render_pos(
         item_range.start_time().to_seconds() * scale + origin.x,
@@ -173,13 +173,11 @@ void DrawItem(
     }
     if (show_time_range) {
         auto time_scalar = TimeScalarForItem(item);
-        auto trimmed_range = item->trimmed_range();
-        auto start = trimmed_range.start_time();
-        auto duration = trimmed_range.duration();
-        auto end = start
-            + otio::RationalTime(
-                duration.value() * time_scalar,
-                duration.rate());
+        auto start = item_range.start_time();
+        auto duration = item_range.duration();
+        auto end = start + otio::RationalTime(
+                           duration.value() * time_scalar,
+                           duration.rate());
         auto rate = start.rate();
         float ruler_y_offset = font_height + text_offset.y;
         ImGui::SetCursorPos(
@@ -203,8 +201,8 @@ void DrawItem(
             "%s: %s\nRange: %s - %s\nDuration: %s%s",
             item->schema_name().c_str(),
             label_str.c_str(),
-            FormattedStringFromTime(trimmed_range.start_time()).c_str(),
-            FormattedStringFromTime(trimmed_range.end_time_inclusive()).c_str(),
+            FormattedStringFromTime(item_range.start_time()).c_str(),
+            FormattedStringFromTime(item_range.end_time_inclusive()).c_str(),
             FormattedStringFromTime(duration).c_str(),
             extra.c_str());
     }
@@ -851,8 +849,8 @@ bool DrawTimecodeTrack(
     float scale,
     float full_width,
     float track_height,
-    bool interactive = true) {
-    bool moved_playhead = false;
+    bool  interactive = true) {
+    bool  moved_playhead = false;
 
     float width = ImGui::GetContentRegionAvail().x;
     ImVec2 size(fmaxf(full_width, width), track_height);
