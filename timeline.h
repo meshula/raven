@@ -1,8 +1,10 @@
 // Timeline widget
 #ifndef RAVEN_TIMELINE_WIDGET_H
 #define RAVEN_TIMELINE_WIDGET_H
+#include <opentimelineio/gap.h>
 #include <opentimelineio/serializableObject.h>
 #include <opentimelineio/timeline.h>
+#include <opentimelineio/transition.h>
 namespace otio = opentimelineio::OPENTIMELINEIO_VERSION;
 
 #include <map>
@@ -27,22 +29,30 @@ constexpr inline TimelineNode TimelineNodeNull() { return { 0 }; }
 constexpr inline TimelineNode RootNodeId() { return (TimelineNode){1}; }
 
 class TimelineProvider {
+public:
+    enum NodeKind {
+        General, Gap, Transition
+    };
+
 protected:
     std::string nullName;
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _syncStarts;
     std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _seqStarts;
     std::map<TimelineNode, otio::TimeRange,           cmp_TimelineNode> _times;
     std::map<TimelineNode, std::string,               cmp_TimelineNode> _names;
-    std::map<TimelineNode, std::string,               cmp_TimelineNode> _kinds;
+    std::map<TimelineNode, std::string,               cmp_TimelineNode> _trackKinds;
+    std::map<TimelineNode, NodeKind,                  cmp_TimelineNode> _kinds;
     void clearMaps() {
         _syncStarts.clear();
         _seqStarts.clear();
         _times.clear();
         _names.clear();
+        _trackKinds.clear();
+        _kinds.clear();
     }
 
 public:
-    TimelineProvider() {
+    explicit TimelineProvider() {
         nullName = "<null>";
     }
     virtual ~TimelineProvider() = default;
@@ -52,8 +62,6 @@ public:
     TimelineNode HasParent(TimelineNode) const;
     
     virtual std::vector<std::string> NodeKindNames() const = 0;
-    virtual const std::string        NodeKindName(TimelineNode) const = 0;
-    virtual const std::string        NodeSecondaryKindName(TimelineNode) const = 0;
     virtual TimelineNode             RootNode() const = 0;
     virtual otio::TimeRange          TimelineTimeRange() const = 0;
 
@@ -63,9 +71,15 @@ public:
             return nullName;
         return it->second;
     }
-    const std::string& Kind(TimelineNode n) const {
+    NodeKind Kind(TimelineNode n) const {
         auto it = _kinds.find(n);
         if (it == _kinds.end())
+            return NodeKind::General;
+        return it->second;
+    }
+    const std::string& TrackKind(TimelineNode n) const {
+        auto it = _trackKinds.find(n);
+        if (it == _trackKinds.end())
             return nullName;
         return it->second;
     }
@@ -166,7 +180,7 @@ public:
             start_it->second.push_back(trackNode); // register the synchronous start
             _seqStarts[trackNode] = std::vector<TimelineNode>();
             _names[trackNode] = track->name();
-            _kinds[trackNode] = dynamic_cast<otio::Track*>(track.value)->kind();
+            _trackKinds[trackNode] = dynamic_cast<otio::Track*>(track.value)->kind();
             auto seq_it = _seqStarts.find(trackNode);
             ++nextId;
             
@@ -179,6 +193,17 @@ public:
                     _reverse[item] = itemNode;
                     _names[itemNode] = item->name();
                     seq_it->second.push_back(itemNode); // register the sequential starts
+                    
+                    if (dynamic_cast<otio::Gap*>(item) != nullptr) {
+                        _kinds[itemNode] = NodeKind::Gap;
+                    }
+                    else if (dynamic_cast<otio::Transition*>(item) != nullptr) {
+                        _kinds[itemNode] = NodeKind::Transition;
+                    }
+                    else {
+                        _kinds[itemNode] = NodeKind::General;
+                    }
+                    
                     ++nextId;
                 }
             }
@@ -197,18 +222,6 @@ public:
     
     std::vector<std::string> NodeKindNames() const override {
         return {};
-    }
-    const std::string NodeKindName(TimelineNode) const override {
-        return nullName;
-    }
-    const std::string NodeSecondaryKindName(TimelineNode n) const override {
-        auto it = nodeMap.find(n);
-        if (it == nodeMap.end())
-            return nullName;
-        auto track = otio::dynamic_retainer_cast<otio::Track>(it->second);
-        if (track.value == nullptr)
-            return nullName;
-        return track->kind();
     }
     
     TimelineNode RootNode() const override {

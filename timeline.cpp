@@ -37,14 +37,19 @@ void DrawItem(
         float height) 
 {
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    TimelineProvider::NodeKind nodeKind = op->Kind(itemNode);
+    if (nodeKind == TimelineProvider::NodeKind::Transition)
+        return;
+
     otio::SerializableObject::Retainer<otio::Composable> comp = op->OtioFromNode(itemNode).value;
     auto item = dynamic_cast<otio::Item*>(comp.value);
     assert(item);
     if (!item)
         return;
 
+    
     const std::string emptyStr;
-    const std::string& label_str = dynamic_cast<otio::Gap*>(item) != nullptr ? emptyStr : op->Name(itemNode);
+    const std::string& label_str = nodeKind == TimelineProvider::NodeKind::Gap ? emptyStr : op->Name(itemNode);
     auto item_range = op->TimeRange(itemNode);
     if (item_range == otio::TimeRange()) {
         Log("Couldn't find %s in range map", label_str.c_str());
@@ -224,12 +229,16 @@ void DrawTransition(
     float height)
 {
     OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    TimelineProvider::NodeKind nodeKind = op->Kind(transitionNode);
+    if (nodeKind != TimelineProvider::NodeKind::Transition)
+        return;
+    
     auto item = op->OtioFromNode(transitionNode).value;
     auto transition = dynamic_cast<otio::Transition*>(item);
     if (!transition)
         return;
     
-    auto duration = transition->duration();
+    auto duration = op->Duration(transitionNode);
     float width = duration.to_seconds() * scale;
 
     const std::string& transition_name = op->Name(transitionNode);
@@ -1344,7 +1353,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         // filter the video tracks
         std::vector<TimelineNode> video_tracks;
         for (auto trackNode : tracks) {
-            if (op->NodeSecondaryKindName(trackNode) == otio::Track::Kind::video) {
+            if (op->TrackKind(trackNode) == otio::Track::Kind::video) {
                 video_tracks.push_back(trackNode);
             }
         }
@@ -1380,7 +1389,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         index = 1;
         for (auto trackNode : tracks) {
             auto item = op->OtioFromNode(trackNode);
-            if (op->NodeSecondaryKindName(trackNode) == otio::Track::Kind::audio) {
+            if (op->TrackKind(trackNode) == otio::Track::Kind::audio) {
                 ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
                 if (ImGui::TableNextColumn()) {
                     DrawTrackLabel(tp, trackNode, index, tp->track_height);
