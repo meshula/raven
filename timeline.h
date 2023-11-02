@@ -64,6 +64,7 @@ public:
     virtual std::vector<std::string> NodeKindNames() const = 0;
     virtual TimelineNode             RootNode() const = 0;
     virtual otio::TimeRange          TimelineTimeRange() const = 0;
+    virtual uint64_t                 StationaryId(TimelineNode) const = 0;
 
     const std::string& Name(TimelineNode n) const {
         auto it = _names.find(n);
@@ -250,6 +251,14 @@ public:
             return TimelineNodeNull();
         }
         return it->second;
+    }
+    
+    uint64_t StationaryId(TimelineNode n) const override {
+        auto it = nodeMap.find(n);
+        if (it == nodeMap.end()) {
+            return {};
+        }
+        return static_cast<uint64_t>(static_cast<uintptr_t>(it->second));
     }
 };
 

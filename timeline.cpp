@@ -47,7 +47,6 @@ void DrawItem(
     if (!item)
         return;
 
-    
     const std::string emptyStr;
     const std::string& label_str = nodeKind == TimelineProvider::NodeKind::Gap ? emptyStr : op->Name(itemNode);
     auto item_range = op->TimeRange(itemNode);
@@ -100,7 +99,7 @@ void DrawItem(
     auto old_pos = ImGui::GetCursorPos();
     ImGui::SetCursorPos(render_pos);
 
-    ImGui::PushID(item);
+    ImGui::PushID((int) op->StationaryId(itemNode));
     ImGui::BeginGroup();
 
     ImGui::InvisibleButton("##Item", size);
@@ -262,7 +261,7 @@ void DrawTransition(
     auto old_pos = ImGui::GetCursorPos();
     ImGui::SetCursorPos(render_pos);
 
-    ImGui::PushID(transition);
+    ImGui::PushID((int) op->StationaryId(transitionNode));
     ImGui::BeginGroup();
 
     ImGui::InvisibleButton("##Item", size);
@@ -381,7 +380,7 @@ void DrawEffects(
     auto old_pos = ImGui::GetCursorPos();
     ImGui::SetCursorPos(render_pos);
 
-    ImGui::PushID(item);
+    ImGui::PushID((int) op->StationaryId(itemNode));
     ImGui::BeginGroup();
 
     ImGui::InvisibleButton("##Effect", size);
@@ -499,7 +498,7 @@ void DrawMarkers(
         auto old_pos = ImGui::GetCursorPos();
         ImGui::SetCursorPos(render_pos);
 
-        ImGui::PushID(item);
+        ImGui::PushID((int) op->StationaryId(itemNode));
         ImGui::BeginGroup();
 
         ImGui::InvisibleButton("##Marker", size);
@@ -1151,7 +1150,7 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
             pos.y += TIMELINE_RADIUS;
             posx[i] = pos.x;
             
-            ImGui::PushID(i);
+            ImGui::PushID(i + 99999);
             ImGui::InvisibleButton(
                                    "zoompanner",
                                    ImVec2(2 * TIMELINE_RADIUS, 2 * TIMELINE_RADIUS));
