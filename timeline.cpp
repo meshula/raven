@@ -469,12 +469,8 @@ void DrawMarkers(
     if (markers.size() == 0)
         return;
 
+    otio::TimeRange item_start_in_parent = op->TimeRange(itemNode);
     auto item_trimmed_start = item->trimmed_range().start_time();
-    auto item_start_in_parent = otio::RationalTime();
-    if (offsetInParent && item->parent() != NULL) {
-        otio::TimeRange item_range = op->TimeRange(itemNode);
-        item_start_in_parent = item_range.start_time();
-    }
 
     for (const auto& marker : markers) {
         auto range = marker->marked_range();
@@ -486,7 +482,7 @@ void DrawMarkers(
 
         ImVec2 size(width, arrow_width);
         ImVec2 render_pos(
-            (item_start_in_parent + (start - item_trimmed_start)).to_seconds()
+            (item_start_in_parent.start_time() + (start - item_trimmed_start)).to_seconds()
                     * scale
                 + origin.x - arrow_width / 2,
             ImGui::GetCursorPosY());

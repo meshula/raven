@@ -1,4 +1,4 @@
-// File: 'fonts/mononoki-Regular Nerd Font Complete.ttf' (967448 bytes)
+// File: '/Users/nporcino/dev/raven/fonts/mononoki-Regular Nerd Font Complete.ttf' (967448 bytes)
 // Exported using binary_to_compressed_c.cpp
 static const char MononokiFont_compressed_data_base85[927580+1] =
     "7])#######cjJu*'/###I),##bw9hLYqH##j?;*>%+VLgqAaaaBA'o/fY;99=C6G0J)m<-:?^01N]n42MrW>c3.>>#vrEn/*Cr<9rSG>6%]qV%jB*##>,A0FYe'f;@Z&##Q-&##r>9'I"
