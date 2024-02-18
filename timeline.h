@@ -5,126 +5,21 @@
 #include <opentimelineio/serializableObject.h>
 #include <opentimelineio/timeline.h>
 #include <opentimelineio/transition.h>
+#include "timeline_provider.hpp"
 namespace otio = opentimelineio::OPENTIMELINEIO_VERSION;
 
 #include <map>
 #include <string>
 #include <vector>
 
-struct TimelineNode {
-    uint64_t id;
-};
-
-struct cmp_TimelineNode {
-    bool operator()(const TimelineNode& a, const TimelineNode& b) const {
-        return a.id < b.id;
-    }
-};
-
-inline bool operator== (const TimelineNode& a, const TimelineNode& b) {
-    return a.id == b.id;
-}
-
-constexpr inline TimelineNode TimelineNodeNull() { return { 0 }; }
-constexpr inline TimelineNode RootNodeId() { return (TimelineNode){1}; }
-
-class TimelineProvider {
-public:
-    enum NodeKind {
-        General, Gap, Transition
-    };
-
-protected:
-    std::string nullName;
-    std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _syncStarts;
-    std::map<TimelineNode, std::vector<TimelineNode>, cmp_TimelineNode> _seqStarts;
-    std::map<TimelineNode, otio::TimeRange,           cmp_TimelineNode> _times;
-    std::map<TimelineNode, std::string,               cmp_TimelineNode> _names;
-    std::map<TimelineNode, std::string,               cmp_TimelineNode> _trackKinds;
-    std::map<TimelineNode, NodeKind,                  cmp_TimelineNode> _kinds;
-    void clearMaps() {
-        _syncStarts.clear();
-        _seqStarts.clear();
-        _times.clear();
-        _names.clear();
-        _trackKinds.clear();
-        _kinds.clear();
-    }
-
-public:
-    explicit TimelineProvider() {
-        nullName = "<null>";
-    }
-    virtual ~TimelineProvider() = default;
-
-    TimelineNode HasSequentialSibling(TimelineNode) const;
-    TimelineNode HasSynchronousSibling(TimelineNode) const;
-    TimelineNode HasParent(TimelineNode) const;
-    
-    virtual std::vector<std::string> NodeKindNames() const = 0;
-    virtual TimelineNode             RootNode() const = 0;
-    virtual otio::TimeRange          TimelineTimeRange() const = 0;
-    virtual uint64_t                 StationaryId(TimelineNode) const = 0;
-
-    const std::string& Name(TimelineNode n) const {
-        auto it = _names.find(n);
-        if (it == _names.end())
-            return nullName;
-        return it->second;
-    }
-    NodeKind Kind(TimelineNode n) const {
-        auto it = _kinds.find(n);
-        if (it == _kinds.end())
-            return NodeKind::General;
-        return it->second;
-    }
-    const std::string& TrackKind(TimelineNode n) const {
-        auto it = _trackKinds.find(n);
-        if (it == _trackKinds.end())
-            return nullName;
-        return it->second;
-    }
-    std::vector<TimelineNode> SyncStarts(TimelineNode n) const {
-        auto it = _syncStarts.find(n);
-        if (it == _syncStarts.end())
-            return {};
-        return it->second;  // returns a copy
-    }
-    std::vector<TimelineNode> SeqStarts(TimelineNode n) const {
-        auto it = _seqStarts.find(n);
-        if (it == _seqStarts.end())
-            return {};
-        return it->second;  // returns a copy
-    }
-    otio::TimeRange TimeRange(TimelineNode n) const {
-        auto it = _times.find(n);
-        if (it == _times.end())
-            return otio::TimeRange();
-        return it->second;
-    }
-    otio::RationalTime StartTime(TimelineNode n) const {
-        auto it = _times.find(n);
-        if (it == _times.end())
-            return otio::RationalTime();
-        return it->second.start_time();
-    }
-    otio::RationalTime Duration(TimelineNode n) const {
-        auto it = _times.find(n);
-        if (it == _times.end())
-            return otio::RationalTime();
-        return it->second.duration();
-    }
-};
-
+namespace raven {
 class OTIOProvider : public TimelineProvider {
     otio::SerializableObject::Retainer<otio::Timeline> _timeline;
-    std::map<TimelineNode, 
-             otio::SerializableObject::Retainer<otio::Composable>,
-             cmp_TimelineNode> nodeMap;
-    std::map<TimelineNode, 
-             TimelineNode,
-             cmp_TimelineNode> parentMap;
-    std::map<otio::Composable*, TimelineNode> _reverse;
+    std::map<TimelineNode, otio::SerializableObject::Retainer<otio::Composable>,
+                                            cmp_TimelineNode> nodeMap;
+    std::map<TimelineNode, TimelineNode,
+                                            cmp_TimelineNode> parentMap;
+    std::map<otio::SerializableObject*, TimelineNode> _reverse;
     uint64_t nextId = 0;
     
     // Transform this range map from the context item's coodinate space
@@ -132,8 +27,8 @@ class OTIOProvider : public TimelineProvider {
     // any source_range offsets in intermediate levels of nesting in the
     // composition.
     void TransformToContextCoordinateSpace(
-            std::map<otio::Composable*, otio::TimeRange>& range_map,
-            otio::Item* context) {
+                                           std::map<otio::Composable*, otio::TimeRange>& range_map,
+                                           otio::Item* context) {
         auto zero = otio::RationalTime();
         TimelineNode tracksNode = RootNode();
         auto topItem = OtioFromNode(tracksNode);
@@ -146,15 +41,15 @@ class OTIOProvider : public TimelineProvider {
             }
         }
     }
-
+    
 public:
     OTIOProvider() = default;
     virtual ~OTIOProvider() = default;
     
     otio::TimeRange TimelineTimeRange() const override {
         return otio::TimeRange(
-            _timeline->global_start_time().value_or(otio::RationalTime()),
-            _timeline->duration());
+                               _timeline->global_start_time().value_or(otio::RationalTime()),
+                               _timeline->duration());
     }
     
     void SetTimeline(otio::SerializableObject::Retainer<otio::Timeline> t) {
@@ -168,7 +63,7 @@ public:
         otio::Stack* stack = t->tracks();
         nodeMap[RootNodeId()] = otio::dynamic_retainer_cast<otio::Composable>(t);
         _syncStarts[RootNodeId()] = std::vector<TimelineNode>();
-
+        
         // encode the tracks of the timeline's stack as sync starts on the root.
         auto start_it = _syncStarts.find(RootNodeId());
         nextId = 3;
@@ -232,11 +127,11 @@ public:
         }
         return it->first;
     }
-
-    otio::SerializableObject::Retainer<otio::Timeline> OtioTimeilne() {
+    
+    otio::SerializableObject::Retainer<otio::Timeline> OtioTimeline() {
         return _timeline;
     }
-
+    
     otio::SerializableObject::Retainer<otio::Composable> OtioFromNode(TimelineNode n) {
         auto it = nodeMap.find(n);
         if (it == nodeMap.end()) {
@@ -245,7 +140,7 @@ public:
         return it->second;
     }
     
-    TimelineNode NodeFromOtio(otio::Composable* i) {
+    TimelineNode NodeFromOtio(otio::SerializableObject* i) {
         auto it = _reverse.find(i);
         if (it == _reverse.end()) {
             return TimelineNodeNull();
@@ -262,33 +157,6 @@ public:
     }
 };
 
-/*
- The ProviderHarness holds the timeline state; it's got a provider,
- and runtime state, such as playhead position.
- */
-
-class TimelineProviderHarness {
-public:
-    TimelineProviderHarness() = default;
-    ~TimelineProviderHarness() = default;
-    
-    std::unique_ptr<TimelineProvider> provider;
-    
-    otio::RationalTime playhead;
-    otio::TimeRange playhead_limit; // min/max limit for moving the playhead, auto-calculated
-    bool  drawPanZoomer = true;
-    float zebra_factor = 0.1;   // opacity of the per-frame zebra stripes
-    bool  scroll_to_playhead = false; // internal flag, only true until next frame
-    bool  snap_to_frames = true; // user preference to snap the playhead, times,
-                                // ranges, etc. to frames
-    float scale = 100.0f;       // zoom scale, measured in pixels per second
-    float track_height = 30.0f; // current track height (pixels)
-    float timeline_width = 100.0f; // automatically calculated (pixels)
-
-    // to be abstracted
-    otio::SerializableObject* selected_object; // maybe NULL
-};
-
 void DrawTimeline(TimelineProviderHarness* timeline);
 bool DrawTransportControls(TimelineProviderHarness* timeline);
 void DrawTimecodeRuler(
@@ -300,5 +168,9 @@ void DrawTimecodeRuler(
     float time_scale,
     float width,
     float height);
+
+} // raven
+
+
 
 #endif

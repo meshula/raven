@@ -18,6 +18,8 @@
 static int __tracks_rendered;
 static int __items_rendered;
 
+namespace raven {
+
 double
 TimeScalarForItem(otio::Item* item) {
     double time_scalar = 1.0;
@@ -30,13 +32,13 @@ TimeScalarForItem(otio::Item* item) {
 }
 
 void DrawItem(
-        TimelineProviderHarness* tp,
-        TimelineNode itemNode,
-        float scale,
-        ImVec2 origin,
-        float height) 
+              TimelineProviderHarness* tp,
+              TimelineNode itemNode,
+              float scale,
+              ImVec2 origin,
+              float height)
 {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
     TimelineProvider::NodeKind nodeKind = op->Kind(itemNode);
     if (nodeKind == TimelineProvider::NodeKind::Transition)
         return;
@@ -49,7 +51,7 @@ void DrawItem(
 
     const std::string emptyStr;
     const std::string& label_str = nodeKind == TimelineProvider::NodeKind::Gap ? emptyStr : op->Name(itemNode);
-    auto item_range = op->TimeRange(itemNode);
+    auto item_range = op->NodeTimeRange(itemNode);
     if (item_range == otio::TimeRange()) {
         Log("Couldn't find %s in range map", label_str.c_str());
         assert(false);
@@ -68,12 +70,12 @@ void DrawItem(
     bool show_label = width > text_offset.x * 2;
     // is there enough vertical *and* horizontal space for time ranges?
     bool show_time_range = (height > font_height * 2 + text_offset.y * 2) &&
-                           (width > font_width * 15);
-    
+    (width > font_width * 15);
+
     ImVec2 size(width, height);
     ImVec2 render_pos(
-        item_range.start_time().to_seconds() * scale + origin.x,
-        ImGui::GetCursorPosY());
+                      item_range.start_time().to_seconds() * scale + origin.x,
+                      ImGui::GetCursorPosY());
 
     auto label_color = appTheme.colors[AppThemeCol_Label];
     auto fill_color = appTheme.colors[AppThemeCol_Item];
@@ -136,7 +138,7 @@ void DrawItem(
         SelectObject(item);
     }
 
-    if (tp->selected_object == item) {
+    if (tp->selected_object == itemNode) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -151,20 +153,20 @@ void DrawItem(
 
     if (fancy_corners) {
         const ImDrawFlags corners_tl_br = ImDrawFlags_RoundCornersTopLeft
-            | ImDrawFlags_RoundCornersBottomRight;
+        | ImDrawFlags_RoundCornersBottomRight;
         const float corner_radius = 5.0f;
         draw_list
-            ->AddRectFilled(p0, p1, fill_color, corner_radius, corners_tl_br);
+        ->AddRectFilled(p0, p1, fill_color, corner_radius, corners_tl_br);
         // top edge
         draw_list->AddLine(
-            ImVec2(p0.x + corner_radius, p0.y),
-            ImVec2(p1.x, p0.y),
-            light_edge_color);
+                           ImVec2(p0.x + corner_radius, p0.y),
+                           ImVec2(p1.x, p0.y),
+                           light_edge_color);
         // bottom edge
         draw_list->AddLine(
-            ImVec2(p0.x, p1.y - 1),
-            ImVec2(p1.x - corner_radius, p1.y - 1),
-            dark_edge_color);
+                           ImVec2(p0.x, p1.y - 1),
+                           ImVec2(p1.x - corner_radius, p1.y - 1),
+                           dark_edge_color);
     } else {
         draw_list->AddRectFilled(p0, p1, fill_color);
     }
@@ -180,20 +182,20 @@ void DrawItem(
         auto start = item_range.start_time();
         auto duration = item_range.duration();
         auto end = start + otio::RationalTime(
-                           duration.value() * time_scalar,
-                           duration.rate());
+                                              duration.value() * time_scalar,
+                                              duration.rate());
         auto rate = start.rate();
         float ruler_y_offset = font_height + text_offset.y;
         ImGui::SetCursorPos(
-            ImVec2(render_pos.x, render_pos.y + ruler_y_offset));
+                            ImVec2(render_pos.x, render_pos.y + ruler_y_offset));
         DrawTimecodeRuler(tp,
-            item + 1,
-            start,
-            end,
-            rate,
-            scale / time_scalar,
-            width,
-            height - ruler_y_offset);
+                          item + 1,
+                          start,
+                          end,
+                          rate,
+                          scale / time_scalar,
+                          width,
+                          height - ruler_y_offset);
     }
 
     if (ImGui::IsItemHovered()) {
@@ -202,13 +204,13 @@ void DrawItem(
             extra = "\nChildren: " + std::to_string(comp->children().size());
         }
         ImGui::SetTooltip(
-            "%s: %s\nRange: %s - %s\nDuration: %s%s",
-            item->schema_name().c_str(),
-            label_str.c_str(),
-            FormattedStringFromTime(item_range.start_time()).c_str(),
-            FormattedStringFromTime(item_range.end_time_inclusive()).c_str(),
-            FormattedStringFromTime(duration).c_str(),
-            extra.c_str());
+                          "%s: %s\nRange: %s - %s\nDuration: %s%s",
+                          item->schema_name().c_str(),
+                          label_str.c_str(),
+                          FormattedStringFromTime(item_range.start_time()).c_str(),
+                          FormattedStringFromTime(item_range.end_time_inclusive()).c_str(),
+                          FormattedStringFromTime(duration).c_str(),
+                          extra.c_str());
     }
 
     ImGui::PopClipRect();
@@ -221,27 +223,27 @@ void DrawItem(
 }
 
 void DrawTransition(
-    TimelineProviderHarness* tp,
-    TimelineNode transitionNode,
-    float scale,
-    ImVec2 origin,
-    float height)
+                    TimelineProviderHarness* tp,
+                    TimelineNode transitionNode,
+                    float scale,
+                    ImVec2 origin,
+                    float height)
 {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
     TimelineProvider::NodeKind nodeKind = op->Kind(transitionNode);
     if (nodeKind != TimelineProvider::NodeKind::Transition)
         return;
-    
+
     auto item = op->OtioFromNode(transitionNode).value;
     auto transition = dynamic_cast<otio::Transition*>(item);
     if (!transition)
         return;
-    
+
     auto duration = op->Duration(transitionNode);
     float width = duration.to_seconds() * scale;
 
     const std::string& transition_name = op->Name(transitionNode);
-    auto item_range = op->TimeRange(transitionNode);
+    auto item_range = op->NodeTimeRange(transitionNode);
     if (item_range == otio::TimeRange()) {
         Log("Couldn't find %s in range map?!", transition_name.c_str());
         assert(false);
@@ -249,8 +251,8 @@ void DrawTransition(
 
     ImVec2 size(width, height);
     ImVec2 render_pos(
-        item_range.start_time().to_seconds() * scale + origin.x,
-        ImGui::GetCursorPosY());
+                      item_range.start_time().to_seconds() * scale + origin.x,
+                      ImGui::GetCursorPosY());
     ImVec2 text_offset(5.0f, 5.0f);
 
     auto fill_color = appTheme.colors[AppThemeCol_Transition];
@@ -283,7 +285,7 @@ void DrawTransition(
         SelectObject(transition);
     }
 
-    if (tp->selected_object == transition) {
+    if (tp->selected_object == transitionNode) {
         fill_color = selected_fill_color;
     }
 
@@ -294,19 +296,19 @@ void DrawTransition(
     const ImVec2 line_end = ImVec2(p1.x, p0.y);
 
     const ImDrawFlags corners_tl_br = ImDrawFlags_RoundCornersTopLeft
-        | ImDrawFlags_RoundCornersBottomRight;
+    | ImDrawFlags_RoundCornersBottomRight;
     const float corner_radius = height / 2;
     draw_list->AddRectFilled(p0, p1, fill_color, corner_radius, corners_tl_br);
     draw_list->AddLine(line_start, line_end, line_color);
 
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "%s: %s\nIn/Out Offset: %s / %s\nDuration: %s",
-            transition->schema_name().c_str(),
-            transition_name.c_str(),
-            FormattedStringFromTime(transition->in_offset()).c_str(),
-            FormattedStringFromTime(transition->out_offset()).c_str(),
-            FormattedStringFromTime(duration).c_str());
+                          "%s: %s\nIn/Out Offset: %s / %s\nDuration: %s",
+                          transition->schema_name().c_str(),
+                          transition_name.c_str(),
+                          FormattedStringFromTime(transition->in_offset()).c_str(),
+                          FormattedStringFromTime(transition->out_offset()).c_str(),
+                          FormattedStringFromTime(duration).c_str());
     }
 
     ImGui::PopClipRect();
@@ -317,25 +319,27 @@ void DrawTransition(
 }
 
 void DrawEffects(
-    TimelineProviderHarness* tp,
-    TimelineNode itemNode,
-    float scale,
-    ImVec2 origin,
-    float row_height)
+                 TimelineProviderHarness* tp,
+                 TimelineNode itemNode,
+                 float scale,
+                 ImVec2 origin,
+                 float row_height)
 {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
     auto itemPtr = op->OtioFromNode(itemNode).value;
     auto item = dynamic_cast<otio::Item*>(itemPtr);
     if (!item)
         return;
 
-    auto effects = item->effects();
+    using namespace otio;
+
+    std::vector<SerializableObject::Retainer<Effect>>& effects = item->effects();
     if (effects.size() == 0)
         return;
-    
+
     const std::string& effect_name = op->Name(itemNode);
-    
-    auto item_range = op->TimeRange(itemNode);
+
+    auto item_range = op->NodeTimeRange(itemNode);
     if (item_range == otio::TimeRange()) {
         Log("Couldn't find %s in range map?!", effect_name.c_str());
         assert(false);
@@ -347,7 +351,7 @@ void DrawEffects(
         if (label_str != "")
             label_str += ", ";
         label_str += effect_name != "" ? effect->name()
-                                       : effect->effect_name();
+        : effect->effect_name();
     }
     const auto text_size = ImGui::CalcTextSize(label_str.c_str());
     ImVec2 text_offset(5.0f, 5.0f);
@@ -368,9 +372,9 @@ void DrawEffects(
 
     float item_x = item_range.start_time().to_seconds() * scale + origin.x;
     ImVec2 render_pos(
-        item_x + item_width / 2 - size.x / 2, // centered
-        ImGui::GetCursorPosY() + row_height / 2 - size.y / 2 // centered
-    );
+                      item_x + item_width / 2 - size.x / 2, // centered
+                      ImGui::GetCursorPosY() + row_height / 2 - size.y / 2 // centered
+                      );
 
     auto label_color = appTheme.colors[AppThemeCol_Label];
     auto fill_color = appTheme.colors[AppThemeCol_Effect];
@@ -403,14 +407,15 @@ void DrawEffects(
         if (ImGui::IsItemClicked()) {
             SelectObject(effect, item);
         }
-        if (tp->selected_object == effect) {
-            fill_color = selected_fill_color;
-        }
+        /// @TODO effects needs to match the abstraction
+        //if (tp->selected_object == effect) {
+        //    fill_color = selected_fill_color;
+        //}
     } else {
         if (ImGui::IsItemClicked()) {
             SelectObject(item);
         }
-        if (tp->selected_object == item) {
+        if (tp->selected_object == itemNode) {
             fill_color = selected_fill_color;
         }
     }
@@ -425,8 +430,8 @@ void DrawEffects(
     draw_list->AddRectFilled(p0, p1, fill_color, 10);
     if (label_visible) {
         const ImVec2 text_pos = ImVec2(
-            p0.x + size.x / 2 - text_size.x / 2,
-            p0.y + size.y / 2 - text_size.y / 2);
+                                       p0.x + size.x / 2 - text_size.x / 2,
+                                       p0.y + size.y / 2 - text_size.y / 2);
         draw_list->AddText(text_pos, label_color, label_str.c_str());
     }
 
@@ -452,14 +457,14 @@ void DrawEffects(
 }
 
 void DrawMarkers(
-        TimelineProviderHarness* tp,
-        TimelineNode itemNode,
-        float scale,
-        ImVec2 origin,
-        float height,
-        bool offsetInParent)
+                 TimelineProviderHarness* tp,
+                 TimelineNode itemNode,
+                 float scale,
+                 ImVec2 origin,
+                 float height,
+                 bool offsetInParent)
 {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
     auto itemComp = op->OtioFromNode(itemNode).value;
     otio::Item* item = dynamic_cast<otio::Item*>(itemComp);
     if (item == nullptr)
@@ -469,7 +474,7 @@ void DrawMarkers(
     if (markers.size() == 0)
         return;
 
-    otio::TimeRange item_start_in_parent = op->TimeRange(itemNode);
+    otio::TimeRange item_start_in_parent = op->NodeTimeRange(itemNode);
     auto item_trimmed_start = item->trimmed_range().start_time();
 
     for (const auto& marker : markers) {
@@ -482,10 +487,10 @@ void DrawMarkers(
 
         ImVec2 size(width, arrow_width);
         ImVec2 render_pos(
-            (item_start_in_parent.start_time() + (start - item_trimmed_start)).to_seconds()
-                    * scale
-                + origin.x - arrow_width / 2,
-            ImGui::GetCursorPosY());
+                          (item_start_in_parent.start_time() + (start - item_trimmed_start)).to_seconds()
+                          * scale
+                          + origin.x - arrow_width / 2,
+                          ImGui::GetCursorPosY());
 
         auto fill_color = UIColorFromName(marker->color());
         auto selected_fill_color = appTheme.colors[AppThemeCol_MarkerSelected];
@@ -515,9 +520,10 @@ void DrawMarkers(
         if (ImGui::IsItemClicked()) {
             SelectObject(marker, item);
         }
-        if (tp->selected_object == marker) {
-            fill_color = selected_fill_color;
-        }
+        /// @TODO abstract this and restore
+        //if (tp->selected_object == marker) {
+        //    fill_color = selected_fill_color;
+        //}
 
         ImGui::PushClipRect(p0, p1, true);
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -525,29 +531,29 @@ void DrawMarkers(
         auto dimmed_fill_color = ImColor(fill_color);
         dimmed_fill_color.Value.w = 0.5;
         draw_list->AddTriangleFilled(
-            ImVec2(p0.x, p0.y),
-            ImVec2(p0.x + arrow_width / 2, p1.y),
-            ImVec2(p0.x + arrow_width / 2, p0.y),
-            fill_color);
+                                     ImVec2(p0.x, p0.y),
+                                     ImVec2(p0.x + arrow_width / 2, p1.y),
+                                     ImVec2(p0.x + arrow_width / 2, p0.y),
+                                     fill_color);
         draw_list->AddRectFilled(
-            ImVec2(p0.x + arrow_width / 2, p0.y),
-            ImVec2(p1.x - arrow_width / 2, p1.y),
-            ImColor(dimmed_fill_color));
+                                 ImVec2(p0.x + arrow_width / 2, p0.y),
+                                 ImVec2(p1.x - arrow_width / 2, p1.y),
+                                 ImColor(dimmed_fill_color));
         draw_list->AddTriangleFilled(
-            ImVec2(p1.x - arrow_width / 2, p0.y),
-            ImVec2(p1.x - arrow_width / 2, p1.y),
-            ImVec2(p1.x, p0.y),
-            fill_color);
+                                     ImVec2(p1.x - arrow_width / 2, p0.y),
+                                     ImVec2(p1.x - arrow_width / 2, p1.y),
+                                     ImVec2(p1.x, p0.y),
+                                     fill_color);
 
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
-                "%s: %s\nColor: %s\nRange: %s - %s\nDuration: %s",
-                marker->schema_name().c_str(),
-                marker->name().c_str(),
-                marker->color().c_str(),
-                FormattedStringFromTime(range.start_time()).c_str(),
-                FormattedStringFromTime(range.end_time_exclusive()).c_str(),
-                FormattedStringFromTime(duration).c_str());
+                              "%s: %s\nColor: %s\nRange: %s - %s\nDuration: %s",
+                              marker->schema_name().c_str(),
+                              marker->name().c_str(),
+                              marker->color().c_str(),
+                              FormattedStringFromTime(range.start_time()).c_str(),
+                              FormattedStringFromTime(range.end_time_exclusive()).c_str(),
+                              FormattedStringFromTime(duration).c_str());
         }
 
         ImGui::PopClipRect();
@@ -566,14 +572,14 @@ void DrawObjectLabel(TimelineProviderHarness* tp,
     ImGui::AlignTextToFramePadding();
     ImVec2 size(width, height);
     ImGui::InvisibleButton("##empty", size);
-//^^^ this routine needs name and schema_name to be provided
+    //^^^ this routine needs name and schema_name to be provided
     char label_str[200];
     snprintf(
-        label_str,
-        sizeof(label_str),
-        "%s: %s",
-        object->schema_name().c_str(),
-        object->name().c_str());
+             label_str,
+             sizeof(label_str),
+             "%s: %s",
+             object->schema_name().c_str(),
+             object->name().c_str());
 
     auto label_color = appTheme.colors[AppThemeCol_Label];
     auto fill_color = appTheme.colors[AppThemeCol_Track];
@@ -589,9 +595,10 @@ void DrawObjectLabel(TimelineProviderHarness* tp,
         SelectObject(object);
     }
 
-    if (tp->selected_object == object) {
-        fill_color = selected_fill_color;
-    }
+    /// @TODO abstract and restore
+    //if (tp->selected_object == object) {
+    //    fill_color = selected_fill_color;
+    //}
     if (ColorIsBright(fill_color)) {
         label_color = ColorInvert(label_color);
     }
@@ -614,7 +621,7 @@ void DrawObjectLabel(TimelineProviderHarness* tp,
 void DrawTrackLabel(TimelineProviderHarness* tp,
                     TimelineNode trackNode, int index, float height) {
     float width = ImGui::GetContentRegionAvail().x;
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
     auto trackItem = op->OtioFromNode(trackNode);
     otio::SerializableObject::Retainer<otio::Track> track = otio::dynamic_retainer_cast<otio::Track>(trackItem);
     ImGui::BeginGroup();
@@ -625,12 +632,12 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
     const auto& trackName = op->Name(trackNode);
     char label_str[200];
     snprintf(
-        label_str,
-        sizeof(label_str),
-        "%c%d: %s",
-        op->Name(trackNode).c_str()[0],
-        index,
-        trackName.c_str());
+             label_str,
+             sizeof(label_str),
+             "%c%d: %s",
+             op->Name(trackNode).c_str()[0],
+             index,
+             trackName.c_str());
 
     auto label_color = appTheme.colors[AppThemeCol_Label];
     auto fill_color = appTheme.colors[AppThemeCol_Track];
@@ -652,7 +659,7 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
         SelectObject(track);
     }
 
-    if (tp->selected_object == track) {
+    if (tp->selected_object == trackNode) {
         fill_color = selected_fill_color;
     }
     if (ColorIsBright(fill_color)) {
@@ -674,29 +681,29 @@ void DrawTrackLabel(TimelineProviderHarness* tp,
     if (ImGui::IsItemHovered()) {
         auto trimmed_range = track->trimmed_range();
         ImGui::SetTooltip(
-            "%s: %s\n%s #%d\nRange: %s - %s\nDuration: %s\nChildren: %ld",
-            track->schema_name().c_str(),
-            trackName.c_str(),
-            op->Name(trackNode).c_str(),
-            index,
-            FormattedStringFromTime(trimmed_range.start_time()).c_str(),
-            FormattedStringFromTime(trimmed_range.end_time_inclusive()).c_str(),
-            FormattedStringFromTime(trimmed_range.duration()).c_str(),
-            track->children().size());
+                          "%s: %s\n%s #%d\nRange: %s - %s\nDuration: %s\nChildren: %ld",
+                          track->schema_name().c_str(),
+                          trackName.c_str(),
+                          op->Name(trackNode).c_str(),
+                          index,
+                          FormattedStringFromTime(trimmed_range.start_time()).c_str(),
+                          FormattedStringFromTime(trimmed_range.end_time_inclusive()).c_str(),
+                          FormattedStringFromTime(trimmed_range.duration()).c_str(),
+                          track->children().size());
     }
 
     ImGui::EndGroup();
 }
 
 void DrawTrack(
-        TimelineProviderHarness* tp,
-        TimelineNode trackNode,
-        float scale,
-        ImVec2 origin,
-        float full_width,
-        float height) 
+               TimelineProviderHarness* tp,
+               TimelineNode trackNode,
+               float scale,
+               ImVec2 origin,
+               float full_width,
+               float height)
 {
-    auto children = tp->provider->SeqStarts(trackNode);
+    auto children = tp->Provider()->SeqStarts(trackNode);
 
     ImGui::BeginGroup();
 
@@ -717,14 +724,14 @@ void DrawTrack(
 }
 
 void DrawTimecodeRuler(
-        TimelineProviderHarness* tp,
-        const void* ptr_id,
-        otio::RationalTime start,
-        otio::RationalTime end,
-        float frame_rate,
-        float scale,
-        float width,
-        float height) 
+                       TimelineProviderHarness* tp,
+                       const void* ptr_id,
+                       otio::RationalTime start,
+                       otio::RationalTime end,
+                       float frame_rate,
+                       float scale,
+                       float width,
+                       float height)
 {
     ImVec2 size(width, height);
     ImVec2 text_offset(7.0f, 5.0f);
@@ -791,10 +798,10 @@ void DrawTimecodeRuler(
     double last_label_end_x = p0.x - text_offset.x * 2;
     for (int tick_index = 0; tick_index < tick_count; tick_index++) {
         auto tick_time = start.rescaled_to(frame_rate)
-            + otio::RationalTime(
-                tick_index * tick_duration_in_frames,
-                frame_rate)
-            - tick_offset;
+        + otio::RationalTime(
+                             tick_index * tick_duration_in_frames,
+                             frame_rate)
+        - tick_offset;
 
         double tick_x = tick_index * tick_width - tick_offset_x;
         const ImVec2 tick_start = ImVec2(p0.x + tick_x, p0.y + height / 2);
@@ -806,18 +813,18 @@ void DrawTimecodeRuler(
         if (seconds_per_tick >= 0.5) {
             // draw thin lines at each tick
             draw_list->AddLine(
-                tick_start,
-                ImVec2(tick_start.x, tick_end.y),
-                tick_color);
+                               tick_start,
+                               ImVec2(tick_start.x, tick_end.y),
+                               tick_color);
         } else {
             // once individual frames are visible, draw dark/light stripes instead
             int frame = tick_time.to_frames();
             const ImVec2 zebra_start = ImVec2(p0.x + tick_x, p0.y);
             const ImVec2 zebra_end = ImVec2(tick_start.x + tick_width, p1.y);
             draw_list->AddRectFilled(
-                zebra_start,
-                zebra_end,
-                (frame & 1) ? zebra_color_dark : zebra_color_light);
+                                     zebra_start,
+                                     zebra_end,
+                                     (frame & 1) ? zebra_color_dark : zebra_color_light);
         }
 
         const ImVec2 tick_label_pos = ImVec2(p0.x + tick_x + text_offset.x, p0.y + text_offset.y);
@@ -826,9 +833,9 @@ void DrawTimecodeRuler(
             std::string tick_label = FormattedStringFromTime(tick_time);
             auto label_size = ImGui::CalcTextSize(tick_label.c_str());
             draw_list->AddText(
-                tick_label_pos,
-                tick_label_color,
-                tick_label.c_str());
+                               tick_label_pos,
+                               tick_label_color,
+                               tick_label.c_str());
             // advance last_label_end_x so nothing will overlap with the one we just
             // drew
             last_label_end_x = tick_label_pos.x + label_size.x;
@@ -846,14 +853,14 @@ void DrawTimecodeRuler(
 }
 
 bool DrawTimecodeTrack(
-    TimelineProviderHarness* tp,
-    otio::RationalTime start,
-    otio::RationalTime end,
-    float frame_rate,
-    float scale,
-    float full_width,
-    float track_height,
-    bool  interactive = true) {
+                       TimelineProviderHarness* tp,
+                       otio::RationalTime start,
+                       otio::RationalTime end,
+                       float frame_rate,
+                       float scale,
+                       float full_width,
+                       float track_height,
+                       bool  interactive = true) {
     bool  moved_playhead = false;
 
     float width = ImGui::GetContentRegionAvail().x;
@@ -872,7 +879,7 @@ bool DrawTimecodeTrack(
     ImGui::SetItemAllowOverlap();
 
     if (interactive && ImGui::IsItemActive()) // &&
-    // ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        // ImGui::IsMouseDragging(ImGuiMouseButton_Left))
     {
         // MousePos is in SCREEN space
         // Subtract p0 which is also in SCREEN space, and includes scrolling, etc.
@@ -883,13 +890,13 @@ bool DrawTimecodeTrack(
 
     ImGui::SetCursorPos(old_pos);
     DrawTimecodeRuler(tp,
-        "##TimecodeTrackRuler",
-        start,
-        end,
-        frame_rate,
-        scale,
-        size.x,
-        size.y);
+                      "##TimecodeTrackRuler",
+                      start,
+                      end,
+                      frame_rate,
+                      scale,
+                      size.x,
+                      size.y);
 
     ImGui::EndGroup();
     ImGui::PopID();
@@ -902,22 +909,22 @@ ImColor
 ColorOverColor(ImColor a, ImColor b) {
     const float alpha = a.Value.w; // for readability
     return ImColor(
-        a.Value.x * alpha + b.Value.x * (1.0 - alpha),
-        a.Value.y * alpha + b.Value.y * (1.0 - alpha),
-        a.Value.z * alpha + b.Value.z * (1.0 - alpha),
-        b.Value.w);
+                   a.Value.x * alpha + b.Value.x * (1.0 - alpha),
+                   a.Value.y * alpha + b.Value.y * (1.0 - alpha),
+                   a.Value.z * alpha + b.Value.z * (1.0 - alpha),
+                   b.Value.w);
 }
 
 float DrawPlayhead(
-    otio::RationalTime start,
-    otio::RationalTime end,
-    otio::RationalTime playhead,
-    float scale,
-    float full_width,
-    float track_height,
-    float full_height,
-    ImVec2 origin,
-    bool draw_arrow) {
+                   otio::RationalTime start,
+                   otio::RationalTime end,
+                   otio::RationalTime playhead,
+                   float scale,
+                   float full_width,
+                   float track_height,
+                   float full_height,
+                   ImVec2 origin,
+                   bool draw_arrow) {
     float playhead_width = scale / playhead.rate();
     float playhead_x = (playhead - start).to_seconds() * scale;
 
@@ -954,16 +961,16 @@ float DrawPlayhead(
     float playhead_scroll_x = playhead_x;
 
     if (ImGui::IsItemActive()) // &&
-    // ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+        // ImGui::IsMouseDragging(ImGuiMouseButton_Left))
     {
         // MousePos is in SCREEN space
         float mouse_x_widget = ImGui::GetIO().MousePos.x
-            // Subtract WindowPos to get WINDOW space
-            - ImGui::GetWindowPos().x
-            // Subtract origin.x to get TIMELINE space
-            - origin.x
-            // Add ScrollX to compensate for scrolling
-            + ImGui::GetScrollX();
+        // Subtract WindowPos to get WINDOW space
+        - ImGui::GetWindowPos().x
+        // Subtract origin.x to get TIMELINE space
+        - origin.x
+        // Add ScrollX to compensate for scrolling
+        + ImGui::GetScrollX();
         SeekPlayhead(mouse_x_widget / scale + start.to_seconds());
         // Note: Using MouseDelta doesn't work since it is directionally
         // biased by playhead snapping, and other factors I don't understand.
@@ -994,24 +1001,24 @@ float DrawPlayhead(
         ImVec2 label_rect_start = ImVec2(p0.x, label_pos.y);
         ImVec2 label_rect_end = ImVec2(label_end.x + text_offset.x, label_end.y);
         draw_list->AddRectFilled(
-            label_rect_start,
-            label_rect_end,
-            playhead_label_bg_color);
+                                 label_rect_start,
+                                 label_rect_end,
+                                 playhead_label_bg_color);
     }
 
     // with hairline on left edge
     draw_list->AddLine(
-        playhead_line_start,
-        playhead_line_end,
-        playhead_line_color);
+                       playhead_line_start,
+                       playhead_line_end,
+                       playhead_line_color);
 
     // playhead arrow and label
     if (draw_arrow) {
         draw_list->AddTriangleFilled(
-            ImVec2(p0.x - arrow_size.x / 2, p0.y),
-            ImVec2(p0.x + arrow_size.x / 2, p0.y),
-            ImVec2(p0.x, p0.y + arrow_size.y),
-            playhead_line_color);
+                                     ImVec2(p0.x - arrow_size.x / 2, p0.y),
+                                     ImVec2(p0.x + arrow_size.x / 2, p0.y),
+                                     ImVec2(p0.x, p0.y + arrow_size.y),
+                                     playhead_line_color);
     }
 
     // label
@@ -1030,9 +1037,10 @@ float DrawPlayhead(
 bool DrawTransportControls(TimelineProviderHarness* tp) {
     bool moved_playhead = false;
 
-    auto start = tp->playhead_limit.start_time();
-    auto duration = tp->playhead_limit.duration();
-    auto end = tp->playhead_limit.end_time_exclusive();
+    auto playhead_limit = tp->PlayheadLimit();
+    auto start = playhead_limit.start_time();
+    auto duration = playhead_limit.duration();
+    auto end = playhead_limit.end_time_exclusive();
     auto rate = duration.rate();
     if (tp->playhead.rate() != rate) {
         tp->playhead = tp->playhead.rescaled_to(rate);
@@ -1054,14 +1062,14 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
     ImGui::SetNextItemWidth(-270);
     float playhead_seconds = tp->playhead.to_seconds();
     if (ImGui::SliderFloat(
-            "##Playhead",
-            &playhead_seconds,
-            tp->playhead_limit.start_time().to_seconds(),
-            tp->playhead_limit.end_time_exclusive().to_seconds(),
-            playhead_string.c_str())) {
-        SeekPlayhead(playhead_seconds);
-        moved_playhead = true;
-    }
+                           "##Playhead",
+                           &playhead_seconds,
+                           playhead_limit.start_time().to_seconds(),
+                           playhead_limit.end_time_exclusive().to_seconds(),
+                           playhead_string.c_str())) {
+                               SeekPlayhead(playhead_seconds);
+                               moved_playhead = true;
+                           }
 
     ImGui::SameLine();
     ImGui::Text("%s", end_string.c_str());
@@ -1069,16 +1077,16 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100);
     if (ImGui::SliderFloat(
-            "##Zoom",
-            &tp->scale,
-            0.1f,
-            5000.0f,
-            "Zoom",
-            ImGuiSliderFlags_Logarithmic)) {
-        // never go to 0 or less
-        tp->scale = fmax(0.0001f, tp->scale);
-        moved_playhead = true;
-    }
+                           "##Zoom",
+                           &tp->scale,
+                           0.1f,
+                           5000.0f,
+                           "Zoom",
+                           ImGuiSliderFlags_Logarithmic)) {
+                               // never go to 0 or less
+                               tp->scale = fmax(0.0001f, tp->scale);
+                               moved_playhead = true;
+                           }
 
     ImGui::SameLine();
     if (ImGui::Button("Fit")) {
@@ -1092,18 +1100,18 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
     if (tp->drawPanZoomer) {
         //-------------------------------------------------------------------------
         // pan zoomer
-        
+
         static float s_max_timeline_value = 100.f;
         static float s_pixel_offset = 0.f;
-        
+
         static double s_time_in = 0.f;
         static double s_time_out = 1.f;
-        
+
         static double s_time_offset = 0;
         static double s_time_scale = 1;
-        
+
         static const float TIMELINE_RADIUS = 12;
-        
+
         ImGuiWindow* win = ImGui::GetCurrentWindow();
         const float columnOffset = ImGui::GetColumnOffset(1);
         const float columnWidth = ImGui::GetColumnWidth(1) - GImGui->Style.ScrollbarSize;
@@ -1112,7 +1120,7 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
                                                                      GImGui->Style.Colors[ImGuiCol_ButtonHovered]);
         const ImU32 color = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_Button]);
         const float rounding = GImGui->Style.ScrollbarRounding;
-        
+
         // draw bottom axis ribbon outside scrolling region
         win = ImGui::GetCurrentWindow();
         float startx = ImGui::GetCursorScreenPos().x + columnOffset;
@@ -1121,23 +1129,23 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
         ImVec2 tl_end(
                       startx + columnWidth,
                       endy + 2 * ImGui::GetTextLineHeightWithSpacing());
-        
+
         win->DrawList->AddRectFilled(tl_start, tl_end, color, rounding);
-        
+
         // draw time panzoomer
-        
+
         double time_in = s_time_in;
         double time_out = s_time_out;
-        
+
         float posx[2] = { 0, 0 };
         double values[2] = { time_in, time_out };
-        
+
         bool active = false;
         bool hovered = false;
         bool changed = false;
         ImVec2 cursor_pos = { tl_start.x,
             tl_end.y - ImGui::GetTextLineHeightWithSpacing() };
-        
+
         for (int i = 0; i < 2; ++i) {
             ImVec2 pos = cursor_pos;
             pos.x += columnWidth * float(values[i]);
@@ -1145,7 +1153,7 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
             pos.x += TIMELINE_RADIUS;
             pos.y += TIMELINE_RADIUS;
             posx[i] = pos.x;
-            
+
             ImGui::PushID(i + 99999);
             ImGui::InvisibleButton(
                                    "zoompanner",
@@ -1159,7 +1167,7 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
                 changed = hovered = true;
             }
             ImGui::PopID();
-            
+
             win->DrawList->AddCircleFilled(
                                            pos,
                                            TIMELINE_RADIUS,
@@ -1167,18 +1175,18 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
                                            ? pz_active_color
                                            : pz_inactive_color);
         }
-        
+
         if (values[0] > values[1])
             std::swap(values[0], values[1]);
-        
+
         tl_start.x = posx[0];
         tl_start.y += TIMELINE_RADIUS * 0.5f;
         tl_end.x = posx[1];
         tl_end.y = tl_start.y + TIMELINE_RADIUS;
-        
+
         ImGui::PushID(-1);
         ImGui::SetCursorScreenPos(tl_start);
-        
+
         ImVec2 zp = tl_end;
         zp.x -= tl_start.x;
         zp.y -= tl_start.y;
@@ -1189,32 +1197,32 @@ bool DrawTransportControls(TimelineProviderHarness* tp) {
             changed = hovered = true;
         }
         ImGui::PopID();
-        
+
         win->DrawList->AddRectFilled(
                                      tl_start,
                                      tl_end,
                                      ImGui::IsItemActive() || ImGui::IsItemHovered() ? pz_active_color
                                      : pz_inactive_color);
-        
+
         for (int i = 0; i < 2; ++i) {
             if (values[i] < 0)
                 values[i] = 0;
             if (values[i] > 1)
                 values[i] = 1;
         }
-        
+
         time_in = values[0];
         time_out = values[1];
-        
+
         s_time_in = time_in;
         s_time_out = time_out;
-        
+
         ImGui::SetCursorPosY(
                              ImGui::GetCursorPosY() + 2 * ImGui::GetTextLineHeightWithSpacing());
-        
+
         //-------------------------------------------------------------------------
     }
-    
+
     return moved_playhead;
 }
 
@@ -1226,19 +1234,19 @@ void DrawTrackSplitter(TimelineProviderHarness* tp,
     float width = ImGui::GetContentRegionAvail().x;
     float sz1_min = -(tp->track_height - 25.0f) * num_tracks_above;
     if (Splitter(
-            str_id,
-            false,
-            splitter_size,
-            &sz1,
-            &sz2,
-            sz1_min,
-            -200,
-            width,
-            0)) {
-        tp->track_height = fminf(
-            200.0f,
-            fmaxf(25.0f, tp->track_height + (sz1 / num_tracks_above)));
-    }
+                 str_id,
+                 false,
+                 splitter_size,
+                 &sz1,
+                 &sz2,
+                 sz1_min,
+                 -200,
+                 width,
+                 0)) {
+                     tp->track_height = fminf(
+                                              200.0f,
+                                              fmaxf(25.0f, tp->track_height + (sz1 / num_tracks_above)));
+                 }
     ImGui::Dummy(ImVec2(splitter_size, splitter_size));
 }
 
@@ -1246,7 +1254,7 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     // ImGuiStyle& style = ImGui::GetStyle();
     // ImGuiIO& io = ImGui::GetIO();
 
-    if (tp->provider->RootNode() == TimelineNodeNull()) {
+    if (tp->Provider()->RootNode() == TimelineNodeNull()) {
         ImGui::BeginGroup();
         ImGui::Text("No timeline");
         ImGui::EndGroup();
@@ -1254,13 +1262,14 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     }
 
     auto playhead = tp->playhead;
+    auto playhead_limit = tp->PlayheadLimit();
     auto playhead_string = FormattedStringFromTime(playhead);
-    auto start = tp->playhead_limit.start_time();
-    auto duration = tp->playhead_limit.duration();
-    auto end = tp->playhead_limit.end_time_exclusive();
-    auto root = tp->provider->RootNode();
-    auto tracks = tp->provider->SyncStarts(root);
-    
+    auto start = playhead_limit.start_time();
+    auto duration = playhead_limit.duration();
+    auto end = playhead_limit.end_time_exclusive();
+    auto root = tp->Provider()->RootNode();
+    auto tracks = tp->Provider()->SyncStarts(root);
+
     // Tracks
 
     auto available_size = ImGui::GetContentRegionAvail();
@@ -1277,14 +1286,14 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     __items_rendered = 0;
 
     int flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable
-        | ImGuiTableFlags_NoSavedSettings
-        | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX
-        | ImGuiTableFlags_ScrollY | 0;
+    | ImGuiTableFlags_NoSavedSettings
+    | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX
+    | ImGuiTableFlags_ScrollY | 0;
     if (ImGui::BeginTable("Tracks", 2, flags)) {
         ImGui::TableSetupColumn("Track", 0, 100);
         ImGui::TableSetupColumn(
-            "Composition",
-            ImGuiTableColumnFlags_WidthFixed);
+                                "Composition",
+                                ImGuiTableColumnFlags_WidthFixed);
         static bool first = true;
         if (!first) {
             // We allow the 1st column to be user-resizable, but
@@ -1296,14 +1305,14 @@ void DrawTimeline(TimelineProviderHarness* tp) {
             ImGui::TableSetColumnWidth(1, fmaxf(0.0f, full_width) + 200.0f);
         }
         first = false;
-        
+
         // Always show the track labels & the playhead track
         ImGui::TableSetupScrollFreeze(1, 1);
 
         ImGui::TableNextRow(ImGuiTableRowFlags_None, tp->track_height);
         ImGui::TableNextColumn();
-        OTIOProvider* op = dynamic_cast<OTIOProvider*>(tp->provider.get());
-        otio::Timeline* timeline = op->OtioTimeilne();
+        OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+        otio::Timeline* timeline = op->OtioTimeline();
         DrawObjectLabel(tp, timeline, tp->track_height);
 
         ImGui::TableNextColumn();
@@ -1313,34 +1322,34 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         auto origin = ImGui::GetCursorPos();
 
         if (DrawTimecodeTrack(tp,
-                start,
-                end,
-                playhead.rate(),
-                tp->scale,
-                full_width,
-                tp->track_height)) {
+                              start,
+                              end,
+                              playhead.rate(),
+                              tp->scale,
+                              full_width,
+                              tp->track_height)) {
             // scroll_to_playhead = true;
         }
 
         DrawMarkers(
-            tp,
-            op->RootNode(),
-            tp->scale,
-            origin,
-            tp->track_height,
-            false);
+                    tp,
+                    op->RootNode(),
+                    tp->scale,
+                    origin,
+                    tp->track_height,
+                    false);
 
         // draw just the top of the playhead in the fixed timecode track
         float playhead_x = DrawPlayhead(
-            start,
-            end,
-            playhead,
-            tp->scale,
-            full_width,
-            tp->track_height,
-            tp->track_height,
-            origin,
-            true);
+                                        start,
+                                        end,
+                                        playhead,
+                                        tp->scale,
+                                        full_width,
+                                        tp->track_height,
+                                        tp->track_height,
+                                        origin,
+                                        true);
 
         // now shift the origin down below the timecode track
         origin.y += tp->track_height;
@@ -1361,12 +1370,12 @@ void DrawTimeline(TimelineProviderHarness* tp) {
             }
             if (ImGui::TableNextColumn()) {
                 DrawTrack(
-                    tp,
-                    *video_track,
-                    tp->scale,
-                    origin,
-                    full_width,
-                    tp->track_height);
+                          tp,
+                          *video_track,
+                          tp->scale,
+                          origin,
+                          full_width,
+                          tp->track_height);
             }
             --index;
         }
@@ -1391,12 +1400,12 @@ void DrawTimeline(TimelineProviderHarness* tp) {
                 }
                 if (ImGui::TableNextColumn()) {
                     DrawTrack(
-                        tp,
-                        trackNode,
-                        tp->scale,
-                        origin,
-                        full_width,
-                        tp->track_height);
+                              tp,
+                              trackNode,
+                              tp->scale,
+                              origin,
+                              full_width,
+                              tp->track_height);
                 }
                 index++;
             }
@@ -1408,15 +1417,15 @@ void DrawTimeline(TimelineProviderHarness* tp) {
         // ImGui::Text("%s", playhead_string.c_str());
         ImGui::TableNextColumn();
         playhead_x = DrawPlayhead(
-            start,
-            end,
-            playhead,
-            tp->scale,
-            full_width,
-            tp->track_height,
-            full_height,
-            origin,
-            false);
+                                  start,
+                                  end,
+                                  playhead,
+                                  tp->scale,
+                                  full_width,
+                                  tp->track_height,
+                                  full_height,
+                                  origin,
+                                  false);
 
         if (tp->scroll_to_playhead) {
             // This is almost the same as calling ImGui::SetScrollX(playhead_x)
@@ -1434,3 +1443,5 @@ void DrawTimeline(TimelineProviderHarness* tp) {
     }
     ImGui::PopStyleVar();
 }
+
+} // raven

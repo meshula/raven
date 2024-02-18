@@ -8,18 +8,25 @@
 #include <opentimelineio/any.h>
 #include <stdlib.h>
 
+using namespace raven;
+
 void DeleteSelectedObject() {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    otio::Timeline* timeline = op->OtioTimeilne();
-    if (appState.timelinePH.selected_object == timeline) {
-        OTIOProvider* op =
-            dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    otio::Timeline* timeline = op->OtioTimeline();
+    
+    otio::SerializableObject::Retainer<otio::Composable> otioNode =
+                        op->OtioFromNode(appState.timelinePH.selected_object);
+    
+    otio::Timeline* selectedTimeline = dynamic_cast<otio::Timeline*>(otioNode.value);
+
+    if (timeline && (timeline == selectedTimeline)) {
+        OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
         op->SetTimeline(nullptr);
         SelectObject(nullptr);
         return;
     }
 
-    if (const auto& selected_composable = dynamic_cast<otio::Composable*>(appState.timelinePH.selected_object)) {
+    if (const auto& selected_composable = dynamic_cast<otio::Composable*>(otioNode.value)) {
         if (const auto& parent = selected_composable->parent()) {
             auto& children = parent->children();
             auto it = std::find(
@@ -36,7 +43,7 @@ void DeleteSelectedObject() {
     }
 
     if (const auto& selected_marker =
-            dynamic_cast<otio::Marker*>(appState.timelinePH.selected_object)) {
+            dynamic_cast<otio::Marker*>(otioNode.value)) {
         if (const auto& item = dynamic_cast<otio::Item*>(appState.selected_context)) {
             auto& markers = item->markers();
             auto it = std::find(markers.begin(), markers.end(), selected_marker);
@@ -48,7 +55,7 @@ void DeleteSelectedObject() {
         return;
     }
 
-    if (const auto& selected_effect = dynamic_cast<otio::Effect*>(appState.timelinePH.selected_object)) {
+    if (const auto& selected_effect = dynamic_cast<otio::Effect*>(otioNode.value)) {
         if (const auto& item = dynamic_cast<otio::Item*>(appState.selected_context)) {
             auto& effects = item->effects();
             auto it = std::find(effects.begin(), effects.end(), selected_effect);
@@ -64,15 +71,17 @@ void DeleteSelectedObject() {
 void AddMarkerAtPlayhead(otio::Item* item, std::string name, std::string color) {
     auto playhead = appState.timelinePH.playhead;
 
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    otio::Timeline* timeline = op->OtioTimeilne();
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    otio::Timeline* timeline = op->OtioTimeline();
     if (!timeline)
         return;
 
+    otio::SerializableObject::Retainer<otio::Composable> otioNode =
+                        op->OtioFromNode(appState.timelinePH.selected_object);
+
     // Default to the selected item, or the top-level timeline.
     if (item == NULL) {
-        if (const auto& selected_item =
-            dynamic_cast<otio::Item*>(appState.timelinePH.selected_object)) {
+        if (const auto& selected_item = dynamic_cast<otio::Item*>(otioNode.value)) {
             item = selected_item;
         } else {
             // item = appState.selected_object_parent;
@@ -99,17 +108,21 @@ void AddMarkerAtPlayhead(otio::Item* item, std::string name, std::string color) 
 }
 
 void AddTrack(std::string kind) {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    otio::Timeline* timeline = op->OtioTimeilne();
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    otio::Timeline* timeline = op->OtioTimeline();
     if (!timeline)
         return;
 
     // Fall back to the top level stack.
     int insertion_index = -1;
     otio::Stack* stack = timeline->tracks();
+    
+    otio::SerializableObject::Retainer<otio::Composable> otioNode =
+                        op->OtioFromNode(appState.timelinePH.selected_object);
+
 
     // Start with the selected object, if it is a Composable.
-    auto child = dynamic_cast<otio::Composable*>(appState.timelinePH.selected_object);
+    auto child = dynamic_cast<otio::Composable*>(otioNode.value);
     if (child) {
         // Walk up from the selected object until we find a Stack
         otio::Composition* search = child->parent();
@@ -159,19 +172,21 @@ void AddTrack(std::string kind) {
 }
 
 void FlattenTrackDown() {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    otio::Timeline* timeline = op->OtioTimeilne();
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    otio::Timeline* timeline = op->OtioTimeline();
     if (!timeline) {
         Message("Cannot flatten: No timeline.");
         return;
     }
 
-    if (appState.timelinePH.selected_object == NULL) {
+    if (appState.timelinePH.selected_object == TimelineNodeNull()) {
         Message("Cannot flatten: No Track is selected.");
         return;
     }
 
-    auto selected_track = dynamic_cast<otio::Track*>(appState.timelinePH.selected_object);
+    otio::SerializableObject::Retainer<otio::Composable> otioNode =
+                        op->OtioFromNode(appState.timelinePH.selected_object);
+    auto selected_track = dynamic_cast<otio::Track*>(otioNode.value);
     if (selected_track == NULL) {
         Message("Cannot flatten: Selected object is not a Track.");
         return;

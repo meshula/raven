@@ -35,6 +35,8 @@ const char* app_name = "Raven";
 AppState appState;
 AppTheme appTheme;
 
+using namespace raven;
+
 ImFont* gFont = nullptr;
 
 // Log a message to the terminal
@@ -234,10 +236,10 @@ std::string otio_error_string(otio::ErrorStatus const& error_status) {
 }
 
 void LoadTimeline(otio::Timeline* timeline) {
-    OTIOProvider* provider = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    provider->SetTimeline(timeline);
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    op->SetTimeline(timeline);
     DetectPlayheadLimits();
-    appState.timelinePH.playhead = appState.timelinePH.playhead_limit.start_time();
+    appState.timelinePH.playhead = appState.timelinePH.PlayheadLimit().start_time();
     FitZoomWholeTimeline();
     SelectObject(timeline);
 }
@@ -270,8 +272,8 @@ void LoadFile(std::string path) {
 }
 
 void SaveFile(std::string path) {
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    otio::Timeline* timeline = op->OtioTimeilne();
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    otio::Timeline* timeline = op->OtioTimeline();
     if (!timeline)
         return;
 
@@ -307,7 +309,7 @@ void MainInit(int argc, char** argv, int initial_width, int initial_height) {
 
     LoadFonts();
     
-    appState.timelinePH.provider = std::make_unique<OTIOProvider>();
+    appState.timelinePH.SetProvider(std::make_unique<OTIOProvider>());
     appState.timelinePH.drawPanZoomer = true;
 
     if (argc > 1) {
@@ -616,8 +618,8 @@ void DrawMenu() {
             if (ImGui::MenuItem("Revert")) {
                 LoadFile(appState.file_path);
             }
-            OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-            otio::Timeline* timeline = op->OtioTimeilne();
+            OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+            otio::Timeline* timeline = op->OtioTimeline();
             if (ImGui::MenuItem("Close", NULL, false,
                                 timeline)) {
                 op->SetTimeline(nullptr);
@@ -658,7 +660,7 @@ void DrawMenu() {
                     "Delete",
                     NULL,
                     false,
-                    appState.timelinePH.selected_object != NULL)) {
+                    appState.timelinePH.selected_object != TimelineNodeNull())) {
                 DeleteSelectedObject();
             }
             ImGui::EndMenu();
@@ -788,7 +790,8 @@ void DrawToolbar(ImVec2 button_size) {
 void SelectObject(
     otio::SerializableObject* object,
     otio::SerializableObject* context) {
-    appState.timelinePH.selected_object = object;
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    appState.timelinePH.selected_object = op->NodeFromOtio(object);
     appState.selected_context = context;
 
     if (object == NULL) {
@@ -804,10 +807,7 @@ void SelectObject(
 }
 
 void SeekPlayhead(double seconds) {
-    double lower_limit = appState.timelinePH.playhead_limit.start_time().to_seconds();
-    double upper_limit = appState.timelinePH.playhead_limit.end_time_exclusive().to_seconds();
-    seconds = fmax(lower_limit, fmin(upper_limit, seconds));
-    appState.timelinePH.playhead = otio::RationalTime::from_seconds(seconds, appState.timelinePH.playhead.rate());
+    appState.timelinePH.Seek(seconds);
     if (appState.timelinePH.snap_to_frames) {
         SnapPlayhead();
     }
@@ -820,11 +820,12 @@ void SnapPlayhead() {
 }
 
 void DetectPlayheadLimits() {
-    appState.timelinePH.playhead_limit = appState.timelinePH.provider->TimelineTimeRange();
+    appState.timelinePH.SetPlayheadLimitFromProvider();
 }
 
 void FitZoomWholeTimeline() {
-    otio::TimeRange r = appState.timelinePH.provider->TimelineTimeRange();
+    appState.timelinePH.SetPlayheadLimitFromProvider();
+    otio::TimeRange r = appState.timelinePH.PlayheadLimit();
     appState.timelinePH.scale =
         appState.timelinePH.timeline_width / r.duration().to_seconds();
 }

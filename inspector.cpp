@@ -18,6 +18,8 @@
 #include <implot.h>
 #include <TextEditor.h>
 
+using namespace raven;
+
 static const char* marker_color_names[] = {
     "PINK", "RED", "ORANGE", "YELLOW",
     "GREEN", "CYAN", "BLUE", "PURPLE",
@@ -76,7 +78,7 @@ void UpdateJSONInspector() {
     jsonEditor.SetText(appState.selected_text);
 }
 
-void DrawJSONInspector() {
+void raven::DrawJSONInspector() {
     jsonEditor.Render("JSON");
 }
 
@@ -459,20 +461,23 @@ void DrawLinearTimeWarp(otio::LinearTimeWarp* timewarp, otio::Item* item) {
     }
 }
 
-void DrawInspector(TimelineProviderHarness* tp) {
-    auto selected_object = tp->selected_object;
-    auto selected_context = appState.selected_context;
-
-    auto playhead = tp->playhead;
-
-    if (!selected_object) {
+void raven::DrawInspector(TimelineProviderHarness* tp) {
+    if (tp->selected_object == TimelineNodeNull()) {
         ImGui::Text("Nothing selected.");
         return;
     }
 
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    auto selected_object = op->OtioFromNode(tp->selected_object);
+    auto selected_context = appState.selected_context;
+
+    auto playhead = tp->playhead;
+
     // This temporary variable is used only for a moment to convert
     // between the datatypes that OTIO uses vs the one that ImGui widget uses.
     char tmp_str[1000];
+    
+
 
     // If the selected Item has effects, lets show them in-line
     // so the user doesn't have to click on each one separately
@@ -480,7 +485,7 @@ void DrawInspector(TimelineProviderHarness* tp) {
 
     // SerializableObjectWithMetadata
     if (const auto& obj = dynamic_cast<otio::SerializableObjectWithMetadata*>(
-            selected_object)) {
+            selected_object.value)) {
         snprintf(tmp_str, sizeof(tmp_str), "%s", obj->name().c_str());
         if (ImGui::InputText("Name", tmp_str, sizeof(tmp_str))) {
             obj->set_name(tmp_str);
@@ -495,7 +500,7 @@ void DrawInspector(TimelineProviderHarness* tp) {
         selected_object->schema_version());
 
     // Timeline
-    if (const auto& timeline = dynamic_cast<otio::Timeline*>(selected_object)) {
+    if (const auto& timeline = dynamic_cast<otio::Timeline*>(selected_object.value)) {
         // Since global_start_time is optional, default to 0
         // but take care not to *set* the value unless the user changes it.
         auto rate = timeline->global_start_time().value_or(playhead).rate();
@@ -508,8 +513,8 @@ void DrawInspector(TimelineProviderHarness* tp) {
     }
 
     // Item
-    if (const auto& item = dynamic_cast<otio::Item*>(selected_object)) {
-        bool is_gap = dynamic_cast<otio::Gap*>(selected_object);
+    if (const auto& item = dynamic_cast<otio::Item*>(selected_object.value)) {
+        bool is_gap = dynamic_cast<otio::Gap*>(selected_object.value);
 
         if (!is_gap) {
             auto item_color = GetItemColor(item);
@@ -528,12 +533,12 @@ void DrawInspector(TimelineProviderHarness* tp) {
     }
 
     // Composition
-    if (const auto& comp = dynamic_cast<otio::Composition*>(selected_object)) {
+    if (const auto& comp = dynamic_cast<otio::Composition*>(selected_object.value)) {
         DrawNonEditableTextField("Children", "%ld", comp->children().size());
     }
 
     // Transition
-    if (const auto& transition = dynamic_cast<otio::Transition*>(selected_object)) {
+    if (const auto& transition = dynamic_cast<otio::Transition*>(selected_object.value)) {
         auto in_offset = transition->in_offset();
         if (DrawRationalTime(tp, "In Offset", &in_offset, false)) {
             transition->set_in_offset(in_offset);
@@ -552,7 +557,7 @@ void DrawInspector(TimelineProviderHarness* tp) {
 
     // Effects - either 1 selected, or a list of effects
     auto effect_context = selected_context;
-    if (const auto& effect = dynamic_cast<otio::Effect*>(selected_object)) {
+    if (const auto& effect = dynamic_cast<otio::Effect*>(selected_object.value)) {
         // Just one
         effects.push_back(effect);
     } else {
@@ -573,7 +578,7 @@ void DrawInspector(TimelineProviderHarness* tp) {
     }
 
     // Marker
-    if (const auto& marker = dynamic_cast<otio::Marker*>(selected_object)) {
+    if (const auto& marker = dynamic_cast<otio::Marker*>(selected_object.value)) {
         auto rate = marker->marked_range().start_time().rate();
 
         auto color_name = DrawColorChooser(marker->color());
@@ -593,13 +598,13 @@ void DrawInspector(TimelineProviderHarness* tp) {
     }
 
     // Track
-    if (const auto& track = dynamic_cast<otio::Track*>(selected_object)) {
+    if (const auto& track = dynamic_cast<otio::Track*>(selected_object.value)) {
         DrawNonEditableTextField("Kind", "%s", track->kind().c_str());
     }
 
     // SerializableObjectWithMetadata
     if (const auto& obj = dynamic_cast<otio::SerializableObjectWithMetadata*>(
-            selected_object)) {
+            selected_object.value)) {
         auto& metadata = obj->metadata();
 
         ImGui::TextUnformatted("Metadata:");
@@ -608,8 +613,9 @@ void DrawInspector(TimelineProviderHarness* tp) {
     }
 }
 
-void DrawMarkersInspector(TimelineProviderHarness* tp) {
-    if (tp->provider->RootNode() == TimelineNodeNull()) {
+void raven::DrawMarkersInspector(TimelineProviderHarness* tp) {
+    OTIOProvider* op = appState.timelinePH.Provider<OTIOProvider>();
+    if (op->RootNode() == TimelineNodeNull()) {
         ImGui::BeginGroup();
         ImGui::Text("No timeline");
         ImGui::EndGroup();
@@ -620,23 +626,32 @@ void DrawMarkersInspector(TimelineProviderHarness* tp) {
     // between the datatypes that OTIO uses vs the one that ImGui widget uses.
     char tmp_str[1000];
 
-    typedef std::pair<otio::SerializableObject::Retainer<otio::Marker>, otio::SerializableObject::Retainer<otio::Item>> marker_parent_pair;
+    struct marker_parent_pair {
+        otio::SerializableObject::Retainer<otio::Marker> marker;
+        otio::SerializableObject::Retainer<otio::Item> parent;
+        TimelineNode markerNode;
+        TimelineNode parentNode;
+    };
+    
     std::vector<marker_parent_pair> pairs;
-    OTIOProvider* op = dynamic_cast<OTIOProvider*>(appState.timelinePH.provider.get());
-    otio::Timeline* timeline = op->OtioTimeilne();
+    otio::Timeline* timeline = op->OtioTimeline();
     auto root = timeline->tracks();
     auto global_start = timeline->global_start_time().value_or(otio::RationalTime());
 
+    TimelineNode rootNode = op->NodeFromOtio(root);
     for (const auto& marker : root->markers()) {
-        pairs.push_back(marker_parent_pair(marker, root));
+        TimelineNode markerNode = op->NodeFromOtio(marker);
+        pairs.push_back((marker_parent_pair) {marker, root, markerNode, rootNode});
     }
 
     for (const auto& child : timeline->tracks()->find_children())
     {
         if (const auto& item = dynamic_cast<otio::Item*>(&*child))
         {
+            TimelineNode itemNode = op->NodeFromOtio(item);
             for (const auto& marker : item->markers()) {
-                pairs.push_back(marker_parent_pair(marker, item));
+                TimelineNode markerNode = op->NodeFromOtio(marker);
+                pairs.push_back((marker_parent_pair) {marker, item, markerNode, itemNode});
             }
         }
     }
@@ -659,12 +674,12 @@ void DrawMarkersInspector(TimelineProviderHarness* tp) {
 
         ImGui::TableHeadersRow();
 
-        for (const auto& pair : pairs)
+        for (const marker_parent_pair& pair : pairs)
         {
-            auto marker = pair.first;
-            auto parent = pair.second;
+            auto& marker = pair.marker;
+            auto& parent = pair.parent;
 
-            ImGui::PushID(&marker);
+            ImGui::PushID(&pair.markerNode);
             ImGui::TableNextRow();
 
             // Local Time
@@ -679,8 +694,8 @@ void DrawMarkersInspector(TimelineProviderHarness* tp) {
             auto global_time = parent->transformed_time(range.start_time(), root) + global_start;
 
             auto is_selected =
-                (tp->selected_object == marker) ||
-                (tp->selected_object == parent);
+                (tp->selected_object == pair.markerNode) ||
+                (tp->selected_object == pair.parentNode);
             if (ImGui::Selectable(TimecodeStringFromTime(global_time).c_str(),
                                   is_selected,
                                   selectable_flags)) {

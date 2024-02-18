@@ -85,7 +85,7 @@ struct AppState {
 
     // This holds the main timeline object.
     // Pretty much everything drills into this one entry point.
-    TimelineProviderHarness timelinePH;
+    raven::TimelineProviderHarness timelinePH;
 
     // Timeline display settings
     float default_track_height = 30.0f; // (pixels)
