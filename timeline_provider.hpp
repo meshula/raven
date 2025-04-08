@@ -8,6 +8,7 @@
 #ifndef timeline_provider_h
 #define timeline_provider_h
 
+#include <map>
 #include <opentime/timeRange.h>
 
 namespace raven {
